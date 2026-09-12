@@ -1,179 +1,23 @@
 <!doctype html>
 <html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CyberQuest</title>
-  <link rel="icon" type="image/png" href="assets/logo-ciberseguridad.png">
-  <link rel="stylesheet" href="css/styles.css">
-  <style>.gallows .part{display:none}.gallows.error-1 .head,.gallows.error-2 .head,.gallows.error-3 .head,.gallows.error-4 .head,.gallows.error-5 .head,.gallows.error-2 .torso,.gallows.error-3 .torso,.gallows.error-4 .torso,.gallows.error-5 .torso,.gallows.error-3 .arms,.gallows.error-4 .arms,.gallows.error-5 .arms,.gallows.error-4 .legs,.gallows.error-5 .legs,.gallows.error-5 .rope,.gallows.error-5 .neck-mark{display:block}.gallows-card.lost .body-motion{animation:hang-sway 1.35s ease-in-out infinite;transform-origin:175px 126px}@keyframes hang-sway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}.with-person{display:flex;gap:25px;align-items:stretch}.with-person img{width:190px;height:210px;object-fit:cover;border-radius:14px;border:2px solid white;box-shadow:0 4px 15px #1c376326}.with-person>div{display:flex;flex-direction:column;justify-content:center}.with-person p{margin:7px 0 0}.module-card.locked{opacity:.62;background:#f7f9fc}.start:disabled{cursor:not-allowed;color:#7b879a}.points-pill{display:inline-flex;align-items:center;gap:3px;white-space:nowrap;background:#fff5df;color:#8f5f00;border:1px solid #f9dfa5;border-radius:99px;padding:4px 8px;font:700 12px Arial,sans-serif;letter-spacing:0!important}.points-pill::before{content:'✦';color:#f4a600}.eyebrow .points-pill{vertical-align:middle;margin-left:4px}.completion h2 .points-pill{font-size:17px;vertical-align:middle}@media(max-width:600px){.with-person{gap:14px}.with-person img{width:100px;height:115px}}@media(prefers-reduced-motion:reduce){.gallows-card.lost .body-motion{animation:none}}</style>
-  <style>.threat-icon{display:inline-grid;place-items:center;width:26px;height:26px;margin-right:7px;border-radius:8px;background:#fff0ee;font-size:15px;vertical-align:middle}.celebration{position:fixed;inset:0;pointer-events:none;z-index:10;overflow:hidden}.confetti{position:absolute;top:42%;left:50%;font-size:22px;animation:burst .8s ease-out forwards}@keyframes burst{to{transform:translate(var(--x),var(--y)) rotate(320deg);opacity:0}}</style>
-<style>.points-pill::before{content:'🛡️'}.score-chip span{font-size:0}.score-chip span::after{content:'🛡️';font-size:14px}.scenario-visual{width:190px;min-width:190px;display:grid;place-items:center;border-radius:14px;background:#e7f0ff;font-size:82px}@media(max-width:600px){.scenario-visual{width:100px;min-width:100px;font-size:48px}}</style>
-<style>.hero-shield::before,.hero-shield::after{content:'';position:absolute;width:9px;height:9px;border-radius:50%;background:#d7e6ff;box-shadow:38px 32px 0 #8db8ff,-52px 46px 0 #d7e6ff,55px -32px 0 #8db8ff,-38px -45px 0 #d7e6ff;animation:float-particles 4.5s ease-in-out infinite}.hero-shield::after{width:5px;height:5px;background:#fff;box-shadow:62px 12px 0 #fff,-65px -15px 0 #8db8ff,12px 65px 0 #fff;animation-delay:-2.2s}@keyframes float-particles{50%{transform:translateY(-12px) rotate(15deg);opacity:.55}}@media(max-width:800px){.topbar{gap:12px;height:66px}.brand{font-size:13px}.app-shell{padding:24px 14px 50px}.hero{min-height:unset;padding:30px 24px;display:flex;flex-direction:column;gap:26px}.hero h1{font-size:31px}.hero p:not(.eyebrow){font-size:15px;margin-bottom:20px}.hero-shield{display:grid!important;margin:16px auto 4px;width:135px;height:135px}.hero-shield span{font-size:54px}.section-head{margin-top:32px}.module-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.module-card{min-height:205px;padding:15px}.module-card h3{font-size:16px}.challenge-banner{padding:22px;align-items:flex-start}.challenge-banner .secondary{width:100%;margin-top:3px}.module-header{padding:20px;align-items:flex-start}.stepper{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px}.step{border-radius:7px!important;padding:10px 3px;font-size:10px;line-height:1.2}.activity-card{padding:24px 18px}.activity-card h2{font-size:24px}.with-person{align-items:center}.with-person img{width:130px;height:150px}.scenario-visual{width:130px;min-width:130px;height:150px;font-size:58px}.options .option{padding:14px;font-size:14px}.game-layout{padding:25px 18px}.gallows-card{min-height:290px}}@media(max-width:480px){.topbar{padding:0 12px}.brand-mark{width:34px;height:34px}.score-chip{font-size:12px}.hero{padding:27px 19px}.hero h1{font-size:28px}.module-grid{grid-template-columns:1fr}.module-card{min-height:170px}.card-footer{padding-top:11px}.module-header h1{font-size:25px}.module-header .card-icon{width:45px;height:45px}.with-person{flex-direction:column;align-items:stretch}.with-person img,.scenario-visual{width:100%;height:180px}.with-person>div{min-height:0}.step{font-size:9px;padding:9px 2px}.activity-footer .primary{width:100%}.word{font-size:22px;letter-spacing:5px}.letters{gap:5px}.letter{width:32px;height:32px}.gallows{width:200px}}</style>
-<style>.auth-card{max-width:850px;margin:45px auto;background:#fff;border:1px solid #dce5f4;border-radius:22px;padding:38px}.auth-card h1{font-size:32px}.auth-card>p:not(.eyebrow){color:#627188}.auth-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:24px}.auth-grid form{background:#f4f7fc;padding:22px;border-radius:15px;display:grid;gap:10px}.auth-grid h2{font-size:21px}.auth-grid input{width:100%;padding:13px;border:1px solid #cbd7e9;border-radius:9px;font:14px Arial}.auth-message{padding:12px 14px;background:#eaf2ff;border-radius:9px;color:#155eef;margin-top:15px}@media(max-width:600px){.auth-card{margin:20px auto;padding:24px 18px}.auth-grid{grid-template-columns:1fr}}</style>
-<style>.auth-single{max-width:590px}.auth-single .auth-grid{grid-template-columns:minmax(0,1fr)}.auth-switch{text-align:center;margin:5px 0 0;color:#66758c;font-size:14px}.auth-switch button{border:0;background:none;color:#155eef;font:700 14px Arial;cursor:pointer;padding:0;text-decoration:underline}</style>
-<style>.admin-panel{width:min(100%,360px);margin:36px 0 0 auto;padding:17px 18px;background:#fff8e8;border:1px solid #f4d897;border-radius:15px}.admin-panel h2{font-size:18px;margin:3px 0 12px}.admin-panel form{display:flex;gap:8px}.admin-panel input{min-width:0;flex:1;padding:10px;border:1px solid #d8c58f;border-radius:8px;font:13px Arial}.admin-panel .primary{padding:10px 12px;font-size:12px;white-space:nowrap}.admin-panel small{display:block;margin-top:8px;color:#725100;font-size:12px}@media(max-width:500px){.admin-panel{margin-left:0}.admin-panel form{flex-direction:column}.admin-panel .primary{width:100%}}</style>
-<style>body{background:linear-gradient(145deg,#d9efff 0%,#eef8ff 42%,#c9e8ff 100%);min-height:100vh}body::before,body::after{content:'';position:fixed;z-index:-1;border-radius:50%;opacity:.55;pointer-events:none;background:#fff;box-shadow:18vw 12vh 0 7px #a8d8ff,42vw 34vh 0 4px #fff,73vw 18vh 0 8px #a8d8ff,87vw 62vh 0 5px #fff,25vw 80vh 0 6px #a8d8ff,64vw 86vh 0 4px #fff;animation:ambient-float 15s ease-in-out infinite}body::before{width:9px;height:9px;top:5vh;left:4vw}body::after{width:6px;height:6px;top:35vh;left:8vw;animation-delay:-7s;box-shadow:25vw 5vh 0 5px #fff,55vw 29vh 0 7px #9ed1ff,82vw 40vh 0 4px #fff,35vw 67vh 0 6px #9ed1ff,91vw 90vh 0 7px #fff}@keyframes ambient-float{50%{transform:translate(18px,-30px);opacity:.85}}.topbar{background:#ffffffdc;backdrop-filter:blur(12px)}.landing-benefits{margin:42px auto 0;max-width:1000px;text-align:center;padding:38px;background:#ffffffbf;border:1px solid #fff;border-radius:24px;box-shadow:0 16px 45px #3d80b426}.landing-benefits h2{font-size:29px}.landing-benefits>p:not(.eyebrow){max-width:680px;margin:14px auto 28px;color:#536b8e;line-height:1.55}.benefit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;text-align:left}.benefit-grid article{background:#f4f9ff;border:1px solid #d7e8fb;border-radius:16px;padding:20px}.benefit-grid span{font-size:29px}.benefit-grid h3{margin:10px 0 5px;font:700 18px Arial}.benefit-grid p{color:#637796;font-size:14px;line-height:1.4;margin:0}@media(max-width:650px){.landing-benefits{padding:26px 18px}.landing-benefits h2{font-size:25px}.benefit-grid{grid-template-columns:1fr;text-align:center}}</style>
-<style>body{background:linear-gradient(112deg,#102a63 0%,#155eef 100%) fixed}.topbar{background:#102a63e8;border-bottom-color:#ffffff2e}.brand{color:#fff}.top-progress{color:#dce9ff}.top-progress b{color:#fff}.progress-track{background:#ffffff3b}.score-chip{background:#fff5df}.app-shell{position:relative}.landing-benefits{background:#ffffffed}.module-card,.activity-card,.module-header,.game-layout{box-shadow:0 15px 35px #06173530}</style>
-<style>.topbar{background:#f5f9ffef;border-bottom-color:#cfe0f6}.brand{color:#14213d}.top-progress{color:#526784}.top-progress b{color:#14213d}.progress-track{background:#d5dfef}.hero{background:transparent;box-shadow:none;border-radius:0;padding:48px 55px;min-height:290px}.hero p:not(.eyebrow){color:#e0eaff}.hero-shield{background:#ffffff08}.hero-shield::before,.hero-shield::after{z-index:-1}.app-shell::before,.app-shell::after{display:none}</style>
-<style>body{font-family:"Segoe UI",Arial,sans-serif}.brand{font-family:"Trebuchet MS",Arial,sans-serif;font-size:15px;line-height:13px;letter-spacing:-.3px}.brand-mark{font:800 15px/1 "Trebuchet MS",Arial,sans-serif;letter-spacing:-1px;background:linear-gradient(145deg,#4bd1ff,#1a5dff 62%,#102a63);box-shadow:0 5px 13px #155eef55}.hero h1,h1,h2,.module-card h3,.benefit-grid h3{font-family:"Trebuchet MS","Segoe UI",sans-serif;letter-spacing:-1px}.hero h1{font-size:47px;line-height:1.08}.landing-benefits h2{font-size:34px}.module-header h1{font-size:33px}.activity-card h2{font-size:30px}@media(max-width:800px){.hero h1{font-size:38px}.landing-benefits h2{font-size:29px}}@media(max-width:480px){.hero h1{font-size:32px}.landing-benefits h2{font-size:26px}.activity-card h2{font-size:26px}}</style>
-<style>@media(max-width:480px){.app-shell{padding-left:12px;padding-right:12px;overflow:hidden}.hero{padding:28px 16px;text-align:center;align-items:center}.hero>div:first-child{width:100%}.hero h1{font-size:clamp(25px,9vw,32px);overflow-wrap:anywhere}.hero p:not(.eyebrow){margin-left:auto;margin-right:auto}.hero-shield{max-width:calc(100vw - 58px);max-height:calc(100vw - 58px);margin-left:auto;margin-right:auto}.primary,.secondary{max-width:100%;white-space:normal}.landing-benefits{margin-left:0;margin-right:0;max-width:100%}}</style>
-<style>.section-head h2,.section-head .eyebrow{color:#fff}.section-head .muted{color:#dbeaff}</style>
-<style>.logout-btn{border:1px solid #bfd2ef;border-radius:9px;background:#fff;color:#365987;padding:8px 11px;font:700 12px Arial;cursor:pointer}.logout-btn:hover{background:#eaf2ff}.hidden{display:none!important}@media(max-width:560px){.logout-btn{padding:7px 8px;font-size:11px}.score-chip{display:none}}</style>
-<style>.brand-mark{background:transparent!important;box-shadow:none!important;padding:0}.brand-mark img{display:block;width:42px;height:42px;object-fit:contain}@media(max-width:480px){.brand-mark img{width:36px;height:36px}}</style>
-<style>.brand{gap:11px;font-family:"Arial Rounded MT Bold","Trebuchet MS","Segoe UI",sans-serif}.brand-mark img{width:52px;height:52px}.brand-name{display:flex;align-items:baseline;gap:3px;font-size:20px;letter-spacing:-1.3px;line-height:1}.brand-name b{color:#132d63}.brand-name strong{font-weight:800;color:#1d67e8}@media(max-width:620px){.brand-mark img{width:42px;height:42px}.brand-name{font-size:17px}}@media(max-width:430px){.brand-name{font-size:15px}.brand{gap:7px}}</style>
-  <style>
-    .welcome-greeting{margin:0 0 12px!important;color:#fff!important;font:700 18px "Trebuchet MS",sans-serif;letter-spacing:.1px}
-  </style>
-  <style>
-    .challenge-icon.hangman-logo{width:58px;height:58px;padding:0;background:linear-gradient(145deg,#3868c7,#193d89)}
-    .hangman-logo-svg{width:100%;height:100%;fill:none;stroke:#fff;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}
-    .hangman-logo-body{transform-origin:48px 12px;animation:hangman-logo-sway 1.5s ease-in-out infinite}
-    @keyframes hangman-logo-sway{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg)}}
-    @media(prefers-reduced-motion:reduce){.hangman-logo-body{animation:none}}
-  </style>
-  <style>
-    .mini-challenge{margin-top:26px;padding:20px;border:1px solid #cfe0fb;border-radius:15px;background:#f7fbff}
-    .mini-challenge h3{margin:0 0 14px;font:700 18px "Trebuchet MS",sans-serif;color:#14213d}
-    .mini-feedback{margin-top:12px}
-    .final-banner{margin:30px 0 0;padding:25px 32px;border:1px solid #ffd76a;border-radius:21px;background:linear-gradient(135deg,#5b3a00,#c98405 42%,#ffe28c 54%,#a66500);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:22px;box-shadow:inset 0 1px #fff5c5,0 15px 32px #2c1b005c}
-    .gold-bar{display:none}
-    .gold-bar::before{content:'';position:absolute;inset:8px 13px 31px;clip-path:polygon(6% 0,94% 0,100% 100%,0 100%);background:linear-gradient(110deg,#fffbd0,#ffe36a 42%,#bd6900);opacity:.88}.gold-bar::after{content:'';position:absolute;left:9%;right:9%;bottom:8px;height:21px;background:linear-gradient(#bd6900,#7d3c00);clip-path:polygon(0 0,100% 0,92% 100%,8% 100%);opacity:.8}.gold-bar span{position:relative;z-index:1;text-shadow:0 1px #fff3a7}
-    .final-copy{margin-right:auto}.final-banner .eyebrow{color:#fff0ae}.final-banner h2{font-size:27px;text-shadow:0 2px #714400}.final-banner p:not(.eyebrow){margin:5px 0 0;color:#18120a}.final-banner small{display:block;margin-top:7px;color:#171109;font-size:13px}.final-banner .primary{box-shadow:0 4px 10px #54310066}.final-banner .primary:disabled{cursor:not-allowed;background:#e8d39a;color:#705318;opacity:.92}.final-banner.final-locked{filter:saturate(.6)}.result-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin:22px 0;text-align:left}.result-grid span{padding:10px 12px;border-radius:9px;background:#f2f7ff;color:#365987;font-weight:700;font-size:14px}
-    @media(max-width:600px){.with-person{flex-direction:column;align-items:stretch}.with-person img{width:100%;height:auto;max-height:290px;object-fit:contain;object-position:center;background:#e7f0ff}.scenario-visual{width:100%;min-width:0;height:180px}.final-banner{padding:22px 18px;align-items:flex-start;flex-direction:column}.gold-bar{width:100%;height:67px}.final-banner .primary{width:100%}.result-grid{grid-template-columns:1fr}.mini-challenge{padding:17px}.mini-challenge h3{font-size:17px}}
-  </style>
-  <style>
-    .remember-option{display:flex;align-items:center;gap:8px;color:#496487;font-size:13px;cursor:pointer}
-    .remember-option input{width:auto!important;accent-color:#155eef}
-    .password-note{margin:0;color:#74839a;font-size:12px;line-height:1.35}
-  </style>
-  <style>
-    .learn-details{display:grid;gap:14px;margin:24px 0}
-    .learn-details p{max-width:none!important;margin:0!important;padding:16px 18px;border-radius:12px;background:#fbfdff;border:1px solid #dce9fb;color:#425d83!important;line-height:1.65!important}
-    @media(max-width:600px){.learn-details p{padding:14px 15px;font-size:15px}}
-  </style>
-  <style>
-    .hero .hero-summary{max-width:650px;margin:8px 0 0;color:#d6e5ff;font-size:14px;line-height:1.55}
-    .hero .hero-summary b{color:#fff}
-    .hero-continue{margin-top:22px}
-    body:has(#moduleGrid) .hero-continue{display:none!important}
-    body:not(:has(#moduleGrid)) .hero-continue.hidden{display:inline-block!important}
-    @media(max-width:600px){.hero .hero-summary{font-size:13px}}
-  </style>
-  <style>
-    .module-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
-    .module-card{position:relative;overflow:hidden;min-height:255px;border:1px solid #d7e5f8;isolation:isolate}
-    .module-card .module-glow{position:absolute;inset:-55%;z-index:-1;opacity:0;pointer-events:none}
-    .module-state{margin:13px 0 -5px!important;font-size:10px!important;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;color:#5374a8!important}
-    .module-card.ready{border-color:#f4fbff;background:linear-gradient(145deg,#fff 0%,#e9f6ff 52%,#d6ebff 100%);box-shadow:0 0 0 1px #ffffff70,0 0 32px #ffffff7d,0 16px 34px #001d6540;animation:module-awaken 2.8s ease-in-out infinite}
-    .module-card.ready .module-glow{opacity:1;background:conic-gradient(from 0deg,transparent 0 15%,#fff 23%,transparent 31% 50%,#fff 60%,transparent 68%);animation:solar-spin 8s linear infinite}
-    .module-card.ready .card-icon{box-shadow:0 0 0 5px #ffffffaa,0 0 24px #78c6ff;background:#f3fbff}
-    .module-card.stone{background:linear-gradient(145deg,#b5bdc7 0%,#78828e 49%,#aeb7c2 100%);border-color:#d4dbe2;box-shadow:inset 0 1px #ffffff8c,0 13px 24px #07142a55;color:#fff}
-    .module-card.stone::after{content:'';position:absolute;inset:0;z-index:-1;opacity:.78;background:linear-gradient(126deg,transparent 0 16%,#3c4653 16.4% 17%,transparent 17.4% 38%,#485360 38.4% 39%,transparent 39.4% 100%),linear-gradient(52deg,transparent 0 26%,#4b5662 26.4% 27%,transparent 27.4% 53%,#3c4653 53.4% 54%,transparent 54.4% 100%),linear-gradient(164deg,transparent 0 46%,#4d5865 46.4% 47%,transparent 47.4% 72%,#3b4652 72.4% 73%,transparent 73.4% 100%),repeating-linear-gradient(127deg,transparent 0 37px,#4b5662 38px 39px,transparent 40px 76px)}
-    .module-card.stone h3,.module-card.stone p,.module-card.stone .card-footer{color:#fff!important}.module-card.stone .module-state{color:#f4f8ff!important}.module-card.stone .card-icon{filter:none;background:#eef3f7;box-shadow:0 0 0 4px #ffffff55,0 5px 12px #17243455}.module-card.stone .start{color:#fff}
-    .module-card.locked{filter:grayscale(1);opacity:.77;background:linear-gradient(145deg,#f7f8fa,#d8dce1);border-color:#c6cbd1;box-shadow:none}.module-card.locked .card-icon{background:#d1d5da}.module-card.locked .module-state{color:#737a84!important}
-    @keyframes module-awaken{50%{transform:translateY(-5px);box-shadow:0 0 0 1px #fff,0 0 45px #ffffffe8,0 20px 38px #001d6550}}
-    @keyframes solar-spin{to{transform:rotate(360deg)}}
-    .unlock-cinematic{position:fixed;inset:0;z-index:30;display:grid;place-items:center;pointer-events:none;background:linear-gradient(180deg,#0b28632b,transparent 65%);animation:cinematic-out 2.1s ease-out forwards}
-    .unlock-stars{position:absolute;inset:0;overflow:hidden}
-    .unlock-star{position:absolute;top:-12%;left:var(--left);font-size:var(--size);color:#fff7b2;text-shadow:0 0 9px #fff,0 0 18px #ffd75f;opacity:0;animation:star-rain var(--duration) ease-in var(--delay) both}
-    .unlock-cinematic>div:last-child{position:relative;padding:20px 28px;border:1px solid #fff;border-radius:16px;background:#123d92e8;color:#fff;text-align:center;font:800 22px "Trebuchet MS",sans-serif;box-shadow:0 8px 30px #071a4a70}
-    .unlock-cinematic small{display:block;margin-top:7px;font:600 13px Arial;color:#d5e8ff}@keyframes star-rain{0%{transform:translate3d(0,-30px,0) rotate(0);opacity:0}12%{opacity:1}100%{transform:translate3d(-35px,105vh,0) rotate(220deg);opacity:0}}@keyframes cinematic-out{78%{opacity:1}100%{opacity:0;visibility:hidden}}
-    @media(max-width:850px){.module-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){.module-grid{grid-template-columns:1fr}.module-card{min-height:210px}.unlock-cinematic>div:last-child{font-size:18px;margin:20px}}
-    @media(prefers-reduced-motion:reduce){.module-card.ready,.module-card.ready .module-glow,.unlock-cinematic,.unlock-star{animation:none}}
-  </style>
-  <style>
-    @media(max-width:800px){.stepper{grid-template-columns:repeat(7,minmax(0,1fr))}.step{font-size:9px;padding:10px 2px}}
-    @media(max-width:480px){.step{font-size:8px;letter-spacing:-.25px;padding:9px 1px}}
-  </style>
-  <style>
-    /* Situaciones: relato simple y mensajes directos como conversación. */
-    .scenario-content {
-      width: 100%;
-      align-self: stretch;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      gap: 10px;
-    }
-
-    .scenario-context {
-      margin: 0 !important;
-      max-width: none !important;
-      line-height: 1.5;
-    }
-
-    .chat-bubble {
-      position: relative;
-      align-self: flex-start;
-      max-width: min(100%, 540px);
-      padding: 13px 16px;
-      border: 1px solid #cadcf7;
-      border-radius: 15px 15px 15px 4px;
-      background: #fff;
-      color: #1b3768;
-      line-height: 1.45;
-      box-shadow: 0 5px 14px #1d63bb14;
-    }
-
-    .chat-bubble::before {
-      content: '';
-      position: absolute;
-      bottom: 0;
-      left: -7px;
-      border-width: 8px 8px 0 0;
-      border-style: solid;
-      border-color: #cadcf7 transparent transparent;
-    }
-
-    .chat-bubble::after {
-      content: '';
-      position: absolute;
-      bottom: 1px;
-      left: -5px;
-      border-width: 6px 6px 0 0;
-      border-style: solid;
-      border-color: #fff transparent transparent;
-    }
-
-    @media (max-width: 600px) {
-      .scenario-content { min-height: 0; }
-      .chat-bubble { align-self: stretch; max-width: none; }
-    }
-  </style>
-</head>
-<body>
-  <header class="topbar">
-    <button class="brand" id="homeBtn" aria-label="Ir al inicio"><span class="brand-mark"><img src="assets/logo-ciberseguridad.png" alt=""></span><span class="brand-name"><b>Cyber</b><strong>Quest</strong></span></button>
-    <div class="top-progress"><span>Tu avance</span><div class="progress-track"><i id="globalProgress"></i></div><b id="globalProgressText">0%</b></div>
-    <div class="score-chip" aria-label="Puntaje"><span>✦</span><b id="score">0</b> pts</div>
-    <button class="logout-btn hidden" id="logoutBtn">Cerrar sesión</button>
-  </header>
-
-  <main class="app-shell" id="app" tabindex="-1"></main>
-
-  <template id="dashboardTemplate">
-    <section class="hero">
-      <div><p class="welcome-greeting" id="userGreeting"></p><p class="eyebrow">ACADEMIA DIGITAL · EMPRESAS SEGURAS</p><h1>La seguridad se construye<br>en cada decisión.</h1><p>CyberQuest es una plataforma de capacitación interactiva para reconocer riesgos, proteger información sensible y actuar con seguridad en el trabajo.</p><p class="hero-summary"><b>Tu recorrido incluye 6 módulos:</b> contraseñas, correo personal / corporativo, protección de datos, amenazas cibernéticas, ingeniería social y grooming. En cada uno vas a encontrar contenido guiado, mini desafíos, situaciones reales y trivias. Al finalizar, podrás realizar una evaluación integral.</p><button class="primary hero-continue hidden" data-action="continue">Comenzar desafío <span>→</span></button></div>
-      <div class="hero-shield" aria-hidden="true"><div class="orbit o1"></div><div class="orbit o2"></div><span>⌾</span><small>SEGURO</small></div>
-    </section>
-    <section class="section-head"><div><p class="eyebrow">RECORRIDO FORMATIVO</p><h2>Mis módulos</h2></div><p id="moduleCounter" class="muted"></p></section>
-    <section class="module-grid" id="moduleGrid"></section>
-    <section class="challenge-banner"><div class="challenge-icon hangman-logo" aria-hidden="true"><svg class="hangman-logo-svg" viewBox="0 0 64 64"><path d="M10 8h37M48 8v14"/><path d="M48 8v4"/><g class="hangman-logo-body"><circle cx="48" cy="26" r="7"/><path d="M48 33v13M48 37l-8 6M48 37l8 6M48 46l-7 9M48 46l7 9"/></g></svg></div><div><p class="eyebrow">DESAFÍO EXTRA</p><h2>Ahorcado ciberseguro</h2><p>Descubrí conceptos clave antes de quedarte sin intentos.</p></div><button class="secondary" data-action="hangman">Jugar ahora →</button></section>
-    <button class="reset-link" data-action="reset">Reiniciar progreso</button>
-  </template>
-
-  <template id="moduleTemplate">
-    <button class="back" data-action="dashboard">← Volver al tablero</button>
-    <section class="module-header" id="moduleHeader"></section>
-    <nav class="stepper" id="stepper"></nav>
-    <section id="activity"></section>
-  </template>
-
-  <template id="hangmanTemplate">
-    <button class="back" data-action="dashboard">← Volver al tablero</button>
-    <section class="game-layout"><div class="game-copy"><p class="eyebrow">DESAFÍO EXTRA</p><h1>Ahorcado ciberseguro</h1><p>Leé la definición, elegí letras y descubrí el concepto antes de agotar los intentos.</p><div class="definition" id="definition"></div><div id="word" class="word" aria-label="Palabra a adivinar"></div><p class="attempts">Errores: <b id="mistakes">0</b> de 5</p><div id="letters" class="letters"></div><button class="secondary" data-action="newWord">Otra palabra</button></div><div class="gallows-card"><svg viewBox="0 0 260 310" class="gallows" aria-label="Ahorcado"><path class="scaffold" d="M35 280H215M70 280V32H175M70 32H35M175 32V75"/><g class="body-motion"><circle class="part head" cx="175" cy="100" r="25"/><path class="part torso" d="M175 125V190"/><path class="part arms" d="M175 145L140 170M175 145L210 170"/><path class="part legs" d="M175 190L145 230M175 190L205 230"/><path class="part neck-mark" d="M143 126H207"/></g><path class="part rope" d="M175 32V126"/></svg><p id="gameMessage">¡Pensá antes de elegir!</p></div></section>
-  </template>
-  <script src="js/app.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#155eef" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="assets/logo-ciberseguridad.png" />
+    <link rel="icon" type="image/png" href="assets/logo-ciberseguridad.png" />
+    <title>CyberQuest</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
+      }
+    </script>
+  </body>
 </html>
