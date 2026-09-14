@@ -69,14 +69,3 @@ La autenticación online usa **Supabase Auth**: las contraseñas no se guardan e
 
 Si querés que las cuentas entren inmediatamente después de registrarse, desactivá la confirmación por correo en **Authentication → Providers → Email** mientras estén haciendo pruebas. Para que una cuenta sea administradora, registrala primero y luego ejecutá la última instrucción comentada en `supabase/schema.sql`.
 
-## Publicación
-
-Para publicar los cambios en el repositorio:
-
-```powershell
-git -C .\CyberQuest add .
-git -C .\CyberQuest commit -m "Actualizo CyberQuest"
-git -C .\CyberQuest push origin main
-```
-
-GitHub Pages puede tardar unos minutos en actualizarse. Para que la instalación PWA aparezca, abrir la página con HTTPS y actualizarla una vez tras la publicación.
