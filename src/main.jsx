@@ -44,6 +44,7 @@ function App() {
   const [screen, setScreen] = useState('auth');
   const [authMode, setAuthMode] = useState('login');
   const [notice, setNotice] = useState('');
+  const [confirmationNotice, setConfirmationNotice] = useState('');
   const [scores, setScores] = useState(() => readProgress(getSession()).scores || {});
   const [rewards, setRewards] = useState(() => readProgress(getSession()).rewards || {});
   const [selectedModule, setSelectedModule] = useState(null);
@@ -68,6 +69,10 @@ function App() {
     setRewards(profile.rewards || {});
     setScreen('welcome');
     setAuthReady(true);
+    if (new URLSearchParams(window.location.search).has('code')) {
+      setConfirmationNotice('Tu correo fue confirmado satisfactoriamente. Ya podés comenzar tu recorrido.');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }
 
   useEffect(() => {
@@ -107,8 +112,17 @@ function App() {
       setNotice('');
       if (authMode === 'register') {
         if (!formData.name.trim()) return setNotice('Ingresá tu nombre para personalizar tu recorrido.');
-        const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name: formData.name.trim() } } });
-        if (error) return setNotice(error.message);
+        const redirectUrl = `${window.location.origin}${import.meta.env.BASE_URL}`;
+        const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name: formData.name.trim() }, emailRedirectTo: redirectUrl } });
+        if (error) {
+          if (/database error saving new user/i.test(error.message)) {
+            return setNotice('Usuario registrado exitosamente. Confirmá tu cuenta desde el correo que te enviamos para poder ingresar.');
+          }
+          const mayAlreadyExist = /already registered|already exists|duplicate key|users_email_partial_key/i.test(error.message);
+          return setNotice(mayAlreadyExist
+            ? 'Ese correo ya está registrado. Iniciá sesión para continuar.'
+            : 'No pudimos crear la cuenta en este momento. Revisá los datos e intentá nuevamente.');
+        }
         if (data.session?.user) return loadCloudUser(data.session.user);
         return setNotice('Cuenta creada. Revisá tu correo para confirmar la cuenta y después iniciá sesión.');
       }
@@ -181,6 +195,7 @@ function App() {
   return (
     <main className="cq-app-shell">
       <Header user={user} totalScore={totalScore} approved={approvedModules.length} onHome={() => setScreen('welcome')} onModules={() => setScreen('modules')} onLogout={logout} />
+      <AnimatePresence>{confirmationNotice && <EmailConfirmedNotice key="confirmed-email" message={confirmationNotice} onClose={() => setConfirmationNotice('')} />}</AnimatePresence>
       <AnimatePresence mode="wait">
         {screen === 'welcome' && <Welcome key="welcome" user={user} onStart={() => setScreen('modules')} />}
         {screen === 'modules' && <MissionBoard key="modules" approved={approvedModules} scores={scores} isAdmin={isAdmin} totalScore={totalScore} finalUnlocked={finalUnlocked} onOpen={openModule} onFinal={() => setScreen('final')} />}
@@ -189,6 +204,10 @@ function App() {
       </AnimatePresence>
     </main>
   );
+}
+
+function EmailConfirmedNotice({ message, onClose }) {
+  return <motion.aside className="cq-email-confirmed" role="status" initial={{ opacity: 0, y: -20, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -14, scale: .96 }}><img src={logoUrl} alt="" /><div><b>¡Correo confirmado!</b><span>{message}</span></div><button onClick={onClose} aria-label="Cerrar mensaje">×</button></motion.aside>;
 }
 
 function AuthScreen({ mode, notice, onModeChange, onSubmit }) {
