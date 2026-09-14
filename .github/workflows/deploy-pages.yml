@@ -29,6 +29,9 @@ jobs:
         run: npm ci
       - name: Crear versión pública
         run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
       - name: Preparar GitHub Pages
         uses: actions/configure-pages@v5
       - name: Subir sitio compilado

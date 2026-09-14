@@ -44,9 +44,30 @@ Para verla localmente durante el desarrollo:
 npm run dev
 ```
 
+## Progreso y recompensas
+
+- Con Supabase configurado, las cuentas, los puntajes y las misiones aprobadas quedan asociados al usuario online y se recuperan desde cualquier dispositivo.
+- Cada desafío solo puede entregar su recompensa una vez. Se puede volver a responder para repasar el feedback, pero no acumular puntos indefinidamente.
+- Todos los puntajes usan la misma pastilla visual con escudo para que las recompensas se reconozcan de inmediato.
+
+## Ajustes de contenido recientes
+
+- **Contraseñas:** explicación ampliada de MFA, pregunta de filtración personal actualizada y una situación visual de nota con contraseña expuesta.
+- **Correo personal / corporativo:** textos simplificados, opciones de verificación de enlaces ajustadas y avatares de personajes incluidos en la compilación pública.
+
 ## Cuentas y datos
 
-En esta versión React, las cuentas de demostración se guardan solo en el navegador del usuario. La cuenta de revisión es `admin@cyberquest.com` con contraseña `admin123`; tiene todas las misiones y la evaluación integral desbloqueadas. Para una implementación real, las contraseñas deben administrarse exclusivamente desde un servidor con hashes, nunca como texto legible en el navegador.
+La autenticación online usa **Supabase Auth**: las contraseñas no se guardan en el navegador ni en el repositorio. El perfil de cada persona conserva sus puntajes y recompensas en la tabla protegida `profiles`.
+
+### Configuración inicial de Supabase
+
+1. Creá un proyecto en [Supabase](https://supabase.com/).
+2. En **SQL Editor**, ejecutá el contenido de `supabase/schema.sql`.
+3. En **Project Settings → API**, copiá la URL del proyecto y la clave pública `anon`.
+4. Para desarrollo local, copiá `.env.example` a `.env` y completá `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`.
+5. Para GitHub Pages, en el repositorio abrí **Settings → Secrets and variables → Actions** y creá los secretos `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` con esos mismos valores. El flujo de publicación ya los incorpora al generar la aplicación.
+
+Si querés que las cuentas entren inmediatamente después de registrarse, desactivá la confirmación por correo en **Authentication → Providers → Email** mientras estén haciendo pruebas. Para que una cuenta sea administradora, registrala primero y luego ejecutá la última instrucción comentada en `supabase/schema.sql`.
 
 ## Publicación
 
