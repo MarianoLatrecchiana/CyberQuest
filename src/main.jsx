@@ -41,6 +41,8 @@ function readProgress(user) {
 function App() {
   const [user, setUser] = useState(() => isSupabaseConfigured ? null : getSession());
   const [authReady, setAuthReady] = useState(() => !isSupabaseConfigured);
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [recoveryNotice, setRecoveryNotice] = useState('');
   const [screen, setScreen] = useState('auth');
   const [authMode, setAuthMode] = useState('login');
   const [notice, setNotice] = useState('');
@@ -92,8 +94,14 @@ function App() {
       else if (active) setAuthReady(true);
     }
     restoreSession();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return;
+      if (event === 'PASSWORD_RECOVERY') {
+        setRecoveryMode(true);
+        setRecoveryNotice('Elegí una contraseña nueva para proteger tu cuenta.');
+        setAuthReady(true);
+        return;
+      }
       if (session?.user) loadCloudUser(session.user);
       else { setUser(null); setScreen('auth'); setAuthReady(true); }
     });
@@ -110,6 +118,12 @@ function App() {
 
     if (isSupabaseConfigured) {
       setNotice('');
+      if (authMode === 'recovery') {
+        const redirectUrl = `${window.location.origin}${import.meta.env.BASE_URL}`;
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl });
+        if (error) return setNotice('No pudimos enviar el enlace. Intentá nuevamente en unos minutos.');
+        return setNotice('Si existe una cuenta con este correo, vas a recibir un enlace para crear una contraseña nueva.');
+      }
       if (authMode === 'register') {
         if (!formData.name.trim()) return setNotice('Ingresá tu nombre para personalizar tu recorrido.');
         const redirectUrl = `${window.location.origin}${import.meta.env.BASE_URL}`;
@@ -120,10 +134,11 @@ function App() {
           }
           const mayAlreadyExist = /already registered|already exists|duplicate key|users_email_partial_key/i.test(error.message);
           return setNotice(mayAlreadyExist
-            ? 'Ese correo ya está registrado. Iniciá sesión para continuar.'
+            ? 'Ya tenés una cuenta. Iniciá sesión para seguir con tu recorrido.'
             : 'No pudimos crear la cuenta en este momento. Revisá los datos e intentá nuevamente.');
         }
         if (data.session?.user) return loadCloudUser(data.session.user);
+        if (data.user?.identities?.length === 0) return setNotice('Ya tenés una cuenta. Iniciá sesión para seguir con tu recorrido.');
         return setNotice('Cuenta creada. Revisá tu correo para confirmar la cuenta y después iniciá sesión.');
       }
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -132,6 +147,8 @@ function App() {
     }
 
     const users = getUsers();
+
+    if (authMode === 'recovery') return setNotice('La recuperación por correo está disponible cuando CyberQuest está conectado a Supabase.');
 
     if (authMode === 'register') {
       if (!formData.name.trim()) return setNotice('Ingresá tu nombre para personalizar tu recorrido.');
@@ -188,6 +205,22 @@ function App() {
     persistProgress(nextScores, nextRewards);
   }
 
+  async function updatePassword(formData) {
+    const password = formData.password || '';
+    if (password.length < 8) return setRecoveryNotice('La contraseña debe tener al menos 8 caracteres.');
+    if (password !== formData.confirmPassword) return setRecoveryNotice('Las contraseñas no coinciden. Revisalas e intentá nuevamente.');
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return setRecoveryNotice('El enlace venció o no es válido. Pedí uno nuevo para continuar.');
+    await supabase.auth.signOut();
+    setRecoveryMode(false);
+    setUser(null);
+    setScreen('auth');
+    setAuthMode('login');
+    setNotice('Contraseña actualizada correctamente. Ya podés iniciar sesión.');
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
+  if (recoveryMode) return <PasswordRecoveryScreen notice={recoveryNotice} onSubmit={updatePassword} />;
   if (!user) {
     return <AuthScreen mode={authMode} notice={authReady ? notice : 'Conectando tu cuenta…'} onModeChange={(mode) => { setAuthMode(mode); setNotice(''); }} onSubmit={authenticate} />;
   }
@@ -212,6 +245,8 @@ function EmailConfirmedNotice({ message, onClose }) {
 
 function AuthScreen({ mode, notice, onModeChange, onSubmit }) {
   const isRegister = mode === 'register';
+  const isRecovery = mode === 'recovery';
+  const noticeTone = /^(Cuenta creada|Usuario registrado|Contraseña actualizada)/.test(notice) ? 'is-success' : /^(Ya tenés una cuenta|Correo o contraseña|No pudimos)/.test(notice) ? 'is-error' : '';
   function handleSubmit(event) {
     event.preventDefault();
     onSubmit(Object.fromEntries(new FormData(event.currentTarget)));
@@ -222,19 +257,25 @@ function AuthScreen({ mode, notice, onModeChange, onSubmit }) {
       <motion.section className="cq-auth-card" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}>
     <Brand />
     <p className="cq-kicker">ACCESO SEGURO</p>
-    <h1>{isRegister ? 'Creá tu cuenta' : 'Ingresá a tu recorrido'}</h1>
-    <p>{isRegister ? 'Completá tus datos para empezar a aprender con desafíos.' : 'Entrená con situaciones reales y protegé lo que importa.'}</p>
-    {notice && <p className="cq-notice">{notice}</p>}
+    <h1>{isRecovery ? 'Recuperá tu contraseña' : isRegister ? 'Creá tu cuenta' : 'Ingresá a tu recorrido'}</h1>
+    <p>{isRecovery ? 'Ingresá tu correo y te enviaremos un enlace seguro para crear una contraseña nueva.' : isRegister ? 'Completá tus datos para empezar a aprender con desafíos.' : 'Entrená con situaciones reales y protegé lo que importa.'}</p>
+    {notice && <p className={`cq-notice ${noticeTone}`}>{notice}</p>}
     <form onSubmit={handleSubmit} className="cq-auth-form">
       {isRegister && <label>Nombre y apellido<input name="name" autoComplete="name" placeholder="Ej. Mariano" required /></label>}
       <label>Correo electrónico<input name="email" type="email" autoComplete="username" placeholder="nombre@ejemplo.com" required /></label>
-      <label>Contraseña<input name="password" type="password" autoComplete={isRegister ? 'new-password' : 'current-password'} minLength="8" placeholder="Mínimo 8 caracteres" required /></label>
-      <button className="cq-primary" type="submit">{isRegister ? 'Crear cuenta y comenzar' : 'Ingresar al desafío'} <span>→</span></button>
+      {!isRecovery && <label>Contraseña<input name="password" type="password" autoComplete={isRegister ? 'new-password' : 'current-password'} minLength="8" placeholder="Mínimo 8 caracteres" required /></label>}
+      <button className="cq-primary" type="submit">{isRecovery ? 'Enviar enlace de recuperación' : isRegister ? 'Crear cuenta y comenzar' : 'Ingresar al desafío'} <span>→</span></button>
     </form>
-    <p className="cq-auth-switch">{isRegister ? '¿Ya tenés cuenta?' : '¿No tenés cuenta?'} <button onClick={() => onModeChange(isRegister ? 'login' : 'register')}>{isRegister ? 'Iniciá sesión' : 'Registrate'}</button></p>
+    {isRecovery ? <p className="cq-auth-switch">¿Recordaste tu contraseña? <button onClick={() => onModeChange('login')}>Iniciá sesión</button></p> : <><p className="cq-auth-switch">{isRegister ? '¿Ya tenés cuenta?' : '¿No tenés cuenta?'} <button onClick={() => onModeChange(isRegister ? 'login' : 'register')}>{isRegister ? 'Iniciá sesión' : 'Registrate'}</button></p>{!isRegister && <button className="cq-forgot-password" onClick={() => onModeChange('recovery')}>¿Olvidaste tu contraseña?</button>}</>}
       </motion.section>
     </main>
   );
+}
+
+function PasswordRecoveryScreen({ notice, onSubmit }) {
+  function handleSubmit(event) { event.preventDefault(); onSubmit(Object.fromEntries(new FormData(event.currentTarget))); }
+  const noticeTone = /^(Las contraseñas no coinciden|La contraseña debe|El enlace venció)/.test(notice) ? 'is-error' : '';
+  return <main className="cq-auth-page"><FloatingParticles /><motion.section className="cq-auth-card cq-reset-card" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}><Brand /><p className="cq-kicker">CUENTA PROTEGIDA</p><h1>Creá una contraseña nueva</h1><p>Elegí una clave de al menos 8 caracteres y confirmala para actualizar tu acceso.</p>{notice && <p className={`cq-notice ${noticeTone}`}>{notice}</p>}<form onSubmit={handleSubmit} className="cq-auth-form"><label>Contraseña nueva<input name="password" type="password" autoComplete="new-password" minLength="8" placeholder="Mínimo 8 caracteres" required /></label><label>Repetí la contraseña nueva<input name="confirmPassword" type="password" autoComplete="new-password" minLength="8" placeholder="Repetí tu contraseña" required /></label><button className="cq-primary" type="submit">Actualizar contraseña <span>→</span></button></form></motion.section></main>;
 }
 
 function PointsBadge({ value }) { return <span className="cq-points-badge">🛡️ {value} pts</span>; }

@@ -9,7 +9,7 @@
   "background_color": "#102a63",
   "theme_color": "#155eef",
   "icons": [
-    {"src": "assets/logo-ciberseguridad.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
-    {"src": "assets/logo-ciberseguridad.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+    {"src": "cyberquest-logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "cyberquest-logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
   ]
 }

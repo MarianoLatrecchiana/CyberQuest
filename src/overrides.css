@@ -183,3 +183,7 @@ button { font:inherit; }
 
 /* Confirmación de correo: retorno claro a la aplicación después del enlace de Supabase. */
 .cq-email-confirmed{position:fixed;z-index:30;top:88px;left:50%;width:min(560px,calc(100% - 32px));transform:translateX(-50%);display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid #8ad8ac;border-radius:16px;background:#f1fff6;box-shadow:0 18px 42px #0a552a2e;color:#145a35}.cq-email-confirmed img{width:43px;height:43px;object-fit:contain}.cq-email-confirmed div{display:grid;gap:3px;flex:1}.cq-email-confirmed b{font-size:16px}.cq-email-confirmed span{font-size:13px;line-height:1.35}.cq-email-confirmed button{width:30px;height:30px;border:0;border-radius:50%;background:#dff7e9;color:#167043;font-size:21px;line-height:1;cursor:pointer}@media(max-width:600px){.cq-email-confirmed{top:74px;padding:12px}.cq-email-confirmed img{width:36px;height:36px}.cq-email-confirmed b{font-size:14px}.cq-email-confirmed span{font-size:12px}}
+
+/* Recuperación de acceso: vínculo secundario, visible sin competir con el ingreso. */
+.cq-forgot-password{display:block;margin:14px auto 0;border:0;background:transparent;color:#2467dd;font:800 13px/1 Inter,system-ui,sans-serif;cursor:pointer}.cq-forgot-password:hover{text-decoration:underline}.cq-reset-card .cq-kicker{margin-top:28px}
+.cq-notice.is-success{background:#e6f8ed;color:#137542;border:1px solid #8bd8a8}.cq-notice.is-error{background:#fff0f1;color:#b52d42;border:1px solid #f1a7b1}
