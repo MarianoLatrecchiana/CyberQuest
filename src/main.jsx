@@ -14,6 +14,18 @@ const STORAGE_USERS = 'cq_react_users';
 const STORAGE_SESSION = 'cq_react_session';
 const progressStorageKey = (userId) => `cq_react_progress_${userId}`;
 
+const hangmanConcepts = [
+  { word: 'RANSOMWARE', definition: 'Tipo de software malicioso que bloquea o cifra información y exige un pago para recuperarla.' },
+  { word: 'PHISHING', definition: 'Engaño que busca obtener credenciales o datos mediante mensajes, sitios o enlaces falsos.' },
+  { word: 'MALWARE', definition: 'Término general para programas diseñados para dañar, alterar o acceder sin autorización a un equipo.' }
+];
+
+const signalChallenges = [
+  { title: 'Mensaje que apura', text: 'Te llega un WhatsApp que parece ser de una empresa conocida: “Tu paquete está retenido. Pagá ahora desde este enlace”.', answer: 'Frenar y verificar por la web o app oficial, sin abrir el enlace.', signals: ['Te apura a actuar', 'Tiene un enlace', 'Pide un pago inesperado'] },
+  { title: 'Aprobación inesperada', text: 'Tu celular muestra una solicitud para aprobar el acceso a tu cuenta, pero vos no estabas iniciando sesión.', answer: 'Rechazarla y cambiar o revisar la cuenta por un canal conocido.', signals: ['No iniciaste sesión', 'Alguien podría tener tu clave', 'El código no se comparte'] },
+  { title: 'USB encontrado', text: 'Encontrás un USB en la entrada de tu trabajo o edificio, con una etiqueta que dice “Fotos”.', answer: 'No conectarlo; entregarlo o reportarlo para que se revise de forma segura.', signals: ['El dueño es desconocido', 'Puede contener archivos peligrosos', 'La curiosidad no es un control de seguridad'] }
+];
+
 function getUsers() {
   const saved = JSON.parse(localStorage.getItem(STORAGE_USERS) || '[]');
   const admin = { id: 'cq-admin', name: 'Administrador', email: 'admin@cyberquest.com', password: 'admin123', role: 'admin' };
@@ -231,9 +243,11 @@ function App() {
       <AnimatePresence>{confirmationNotice && <EmailConfirmedNotice key="confirmed-email" message={confirmationNotice} onClose={() => setConfirmationNotice('')} />}</AnimatePresence>
       <AnimatePresence mode="wait">
         {screen === 'welcome' && <Welcome key="welcome" user={user} onStart={() => setScreen('modules')} />}
-        {screen === 'modules' && <MissionBoard key="modules" approved={approvedModules} scores={scores} isAdmin={isAdmin} totalScore={totalScore} finalUnlocked={finalUnlocked} onOpen={openModule} onFinal={() => setScreen('final')} />}
+        {screen === 'modules' && <MissionBoard key="modules" approved={approvedModules} scores={scores} isAdmin={isAdmin} totalScore={totalScore} finalUnlocked={finalUnlocked} onOpen={openModule} onFinal={() => setScreen('final')} onGame={(game) => setScreen(game)} />}
         {screen === 'course' && selectedModule && <CourseFlow key={selectedModule.id} module={selectedModule} isAdmin={isAdmin} initialRewards={rewards[selectedModule.id] || []} onProgress={saveModuleProgress} onClose={() => setScreen('modules')} onFinish={finishModule} />}
         {screen === 'final' && <FinalChallenge key="final" onClose={() => setScreen('modules')} />}
+        {screen === 'hangman' && <HangmanGame key="hangman" onClose={() => setScreen('modules')} />}
+        {screen === 'signals' && <SignalsGame key="signals" onClose={() => setScreen('modules')} />}
       </AnimatePresence>
     </main>
   );
@@ -301,7 +315,7 @@ function IntroCarousel() {
   return <aside className={`cq-intro-carousel slide-${index}`}><AnimatePresence mode="wait"><motion.article className="cq-slide-card" key={slide.title} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}><div className="cq-slide-icon">{slide.icon}</div><p>{slide.label}</p><h2>{slide.title}</h2><span>{slide.text}</span><i aria-hidden="true">✦</i></motion.article></AnimatePresence><div className="cq-carousel-controls"><button aria-label="Tarjeta anterior" onClick={() => setIndex((index + slides.length - 1) % slides.length)}>←</button><span>{slides.map((_, item) => <i key={item} className={item === index ? 'active' : ''} />)}</span><button aria-label="Tarjeta siguiente" onClick={() => setIndex((index + 1) % slides.length)}>→</button></div></aside>;
 }
 
-function MissionBoard({ approved, scores, isAdmin, totalScore, finalUnlocked, onOpen, onFinal }) {
+function MissionBoard({ approved, scores, isAdmin, totalScore, finalUnlocked, onOpen, onFinal, onGame }) {
   return <motion.section className="cq-board" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><FloatingParticles />
     <section className="cq-board-intro"><div><p className="cq-kicker">RECORRIDO FORMATIVO</p><h1>Mis misiones</h1><p>Una pausa, una verificación y una buena decisión pueden cambiar el resultado.</p></div><SecurityOrb /></section>
     <section className="cq-mission-grid">{courseModules.map((module, index) => {
@@ -309,6 +323,7 @@ function MissionBoard({ approved, scores, isAdmin, totalScore, finalUnlocked, on
       const complete = isAdmin || approved.includes(module.id);
       return <motion.article key={module.id} className={`cq-mission-card ${unlocked ? 'is-unlocked' : 'is-locked'} ${complete ? 'is-complete' : ''}`} whileHover={unlocked ? { y: -7, scale: 1.01 } : {}}><span className="cq-mission-icon">{module.icon}</span><p>{complete ? 'MISIÓN SUPERADA' : unlocked ? 'MISIÓN DISPONIBLE' : 'MISIÓN BLOQUEADA'}</p><h2>{module.title}</h2><span>{module.subtitle}</span><div className="cq-card-footer"><b>{complete ? '🔓 Desbloqueada' : unlocked ? 'Abrir misión →' : '🔒 Bloqueada'}</b>{complete && <em><PointsBadge value={`${isAdmin ? MODULE_MAX_SCORE : scores[module.id]} / ${MODULE_MAX_SCORE}`} /></em>}</div>{unlocked && <button onClick={() => onOpen(module)}>{complete ? 'Repasar →' : 'Comenzar →'}</button>}</motion.article>;
     })}</section>
+    <section className="cq-games-hub"><div><p className="cq-kicker">ENTRENAMIENTO EXTRA</p><h2>Minijuegos CyberQuest</h2><span>Practicá conceptos y decisiones con desafíos interactivos.</span></div><div className="cq-game-cards"><button onClick={() => onGame('hangman')}><b>🦠</b><strong>Ahorcado ciberseguro</strong><small>Descubrí el concepto antes de quedarte sin intentos.</small><em>Jugar →</em></button><button onClick={() => onGame('signals')}><b>🔎</b><strong>Detectá las señales</strong><small>Identificá alertas y elegí la respuesta segura.</small><em>Jugar →</em></button></div></section>
     <section className={`cq-final-card ${finalUnlocked ? 'is-final-unlocked' : ''}`}><div><p>EVALUACIÓN INTEGRAL</p><h2>Desafío final</h2><span>Combiná los seis temas para conquistar el desafío CyberQuest.</span><small>Necesitás al menos {FINAL_UNLOCK_SCORE} pts y las 6 misiones aprobadas.</small></div><button disabled={!finalUnlocked} onClick={onFinal}>{finalUnlocked ? 'Comenzar evaluación →' : '🔒 Bloqueado'}</button></section>
   </motion.section>;
 }
@@ -380,6 +395,51 @@ function QuestionCard({ eyebrow, item, onCorrect, onAnswered }) {
   const complete = answer !== null;
   function choose(index) { if (complete) return; setAnswer(index); if (index === item.answer) onCorrect(); onAnswered(); }
   return <section className="cq-question-card">{eyebrow && <p className="cq-kicker">{eyebrow}</p>}<h3>{item.prompt}</h3><div className="cq-options">{item.options.map((option, index) => <button key={option} disabled={complete} className={complete ? index === item.answer ? 'correct' : index === answer ? 'wrong' : '' : ''} onClick={() => choose(index)}><b>{String.fromCharCode(65 + index)}.</b> {option}</button>)}</div>{complete && <p className={`cq-feedback ${answer === item.answer ? 'good' : 'bad'}`}><b>{answer === item.answer ? '¡Muy bien! ' : 'Para recordar: '}</b>{item.feedback}</p>}</section>;
+}
+
+function HangmanGame({ onClose }) {
+  const [concept, setConcept] = useState(() => hangmanConcepts[Math.floor(Math.random() * hangmanConcepts.length)]);
+  const [guessed, setGuessed] = useState([]);
+  const [errors, setErrors] = useState(0);
+  const letters = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ'.split('');
+  const complete = concept.word.split('').every((letter) => guessed.includes(letter));
+  const lost = errors >= 5;
+  const finished = complete || lost;
+  const reveal = (letter) => {
+    const normalized = String(letter || '').toUpperCase();
+    if (finished || !letters.includes(normalized) || guessed.includes(normalized)) return;
+    setGuessed((current) => [...current, normalized]);
+    if (!concept.word.includes(normalized)) setErrors((current) => current + 1);
+  };
+  const newConcept = () => {
+    const options = hangmanConcepts.filter((item) => item.word !== concept.word);
+    setConcept(options[Math.floor(Math.random() * options.length)] || hangmanConcepts[0]);
+    setGuessed([]);
+    setErrors(0);
+  };
+  useEffect(() => {
+    const onKeyDown = (event) => reveal(event.key);
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
+  return <section className="cq-game-page"><button className="cq-back" onClick={onClose}>← Mis misiones</button><header className="cq-game-header"><span>🦠</span><div><p className="cq-kicker">MINIJUEGO INTERACTIVO</p><h1>Ahorcado ciberseguro</h1><p>Descubrí conceptos clave antes de agotar tus intentos.</p></div></header><motion.article className={`cq-hangman ${finished ? complete ? 'is-won' : 'is-lost' : ''}`} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}><section className="cq-game-copy"><p className="cq-kicker">CONCEPTO OCULTO</p><div className="cq-definition"><b>Definición</b><span>{concept.definition}</span></div><div className="cq-hangman-word" aria-label="Palabra a descubrir">{concept.word.split('').map((letter, index) => <motion.span key={`${letter}-${index}`} animate={{ opacity: guessed.includes(letter) || lost ? 1 : .32, y: guessed.includes(letter) ? 0 : 4 }}>{guessed.includes(letter) || lost ? letter : '_'}</motion.span>)}</div><p className="cq-attempts">Errores: <b>{errors}</b> de 5</p><div className="cq-keyboard">{letters.map((letter) => <button key={letter} disabled={guessed.includes(letter) || finished} onClick={() => reveal(letter)}>{letter}</button>)}</div>{finished && <motion.div className={`cq-game-message ${complete ? 'good' : 'bad'}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}><b>{complete ? '¡Concepto descubierto!' : `La palabra era ${concept.word}.`}</b><span>{complete ? 'Muy bien: reconociste una amenaza importante.' : 'Probá otro concepto y seguí entrenando.'}</span></motion.div>}<button className="cq-primary cq-new-concept" onClick={newConcept}>{finished ? 'Probar otro concepto →' : 'Cambiar concepto →'}</button></section><aside className="cq-gallows-card"><svg className="cq-gallows" viewBox="0 0 240 300" role="img" aria-label={`Ahorcado: ${errors} errores`}><path d="M25 280H205M65 280V25H158M157 25V67" /><motion.circle cx="157" cy="92" r="24" initial={false} animate={{ opacity: errors >= 1 ? 1 : 0, scale: errors >= 1 ? 1 : .2 }} /><motion.path d="M157 116V190" initial={false} animate={{ pathLength: errors >= 2 ? 1 : 0 }} /><motion.path d="M157 137L126 164" initial={false} animate={{ pathLength: errors >= 3 ? 1 : 0 }} /><motion.path d="M157 137L188 164" initial={false} animate={{ pathLength: errors >= 4 ? 1 : 0 }} /><motion.path d="M157 190L129 228" initial={false} animate={{ pathLength: errors >= 5 ? 1 : 0 }} /><motion.path d="M157 190L185 228" initial={false} animate={{ pathLength: errors >= 5 ? 1 : 0 }} /></svg><p>{finished ? complete ? '¡Lo resolviste!' : 'Casi, seguí practicando.' : 'Cada letra te acerca al concepto.'}</p></aside></motion.article></section>;
+}
+
+function SignalsGame({ onClose }) {
+  const [index, setIndex] = useState(0);
+  const [answer, setAnswer] = useState(null);
+  const [score, setScore] = useState(0);
+  const [finished, setFinished] = useState(false);
+  const item = signalChallenges[index];
+  const options = [item.answer, 'Abrirlo o conectarlo para comprobar si realmente hay un problema.', 'Esperar, porque si fuera importante alguien volverá a escribir.'];
+  const correct = answer === 0;
+  const continueGame = () => {
+    if (index === signalChallenges.length - 1) setFinished(true);
+    else { setIndex((current) => current + 1); setAnswer(null); }
+  };
+  const restart = () => { setIndex(0); setAnswer(null); setScore(0); setFinished(false); };
+  if (finished) return <section className="cq-game-page"><button className="cq-back" onClick={onClose}>← Mis misiones</button><motion.article className="cq-game-result" initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }}><span>🔎</span><p className="cq-kicker">MIRADA ENTRENADA</p><h1>{score} de {signalChallenges.length} señales resueltas</h1><p>{score === signalChallenges.length ? 'Reconociste cuándo conviene frenar y verificar. Esa pausa puede evitar muchos engaños.' : 'Frente a la urgencia o a algo inesperado, frená, verificá por un canal conocido y pedí ayuda.'}</p><div><button className="cq-primary" onClick={restart}>Jugar de nuevo →</button><button className="cq-secondary" onClick={onClose}>Volver a misiones</button></div></motion.article></section>;
+  return <section className="cq-game-page"><button className="cq-back" onClick={onClose}>← Mis misiones</button><header className="cq-game-header"><span>🔎</span><div><p className="cq-kicker">MINIJUEGO INTERACTIVO · {index + 1} DE {signalChallenges.length}</p><h1>Detectá las señales</h1><p>Observá la situación y elegí la respuesta más segura.</p></div></header><motion.article key={item.title} className="cq-signals-card" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }}><h2>{item.title}</h2><section className="cq-signal-situation"><span>💬</span><p>{item.text}</p></section><p className="cq-kicker">SEÑALES PARA DETECTAR</p><div className="cq-signal-list">{item.signals.map((signal, signalIndex) => <motion.div key={signal} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: signalIndex * .12 }}><small>SEÑAL N.º {signalIndex + 1}</small><b>{signal}</b></motion.div>)}</div><h3>¿Cuál es la respuesta más segura?</h3><div className="cq-options">{options.map((option, optionIndex) => <button key={option} disabled={answer !== null} className={answer !== null ? optionIndex === 0 ? 'correct' : optionIndex === answer ? 'wrong' : '' : ''} onClick={() => { setAnswer(optionIndex); if (optionIndex === 0) setScore((current) => current + 1); }}><b>{String.fromCharCode(65 + optionIndex)}.</b> {option}</button>)}</div>{answer !== null && <motion.div className={`cq-feedback ${correct ? 'good' : 'bad'}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}><b>{correct ? '¡Bien visto! ' : 'Para recordar: '}</b>{item.answer}</motion.div>}{answer !== null && <button className="cq-primary cq-next-game" onClick={continueGame}>{index === signalChallenges.length - 1 ? 'Ver resultado →' : 'Siguiente situación →'}</button>}</motion.article></section>;
 }
 
 function FinalChallenge({ onClose }) {
