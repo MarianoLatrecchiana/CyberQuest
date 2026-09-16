@@ -8,8 +8,13 @@ create table if not exists public.profiles (
   role text not null default 'user' check (role in ('user', 'admin')),
   scores jsonb not null default '{}'::jsonb,
   rewards jsonb not null default '{}'::jsonb,
+  course_state jsonb not null default '{"modules":{},"activeModuleId":null}'::jsonb,
   updated_at timestamptz not null default now()
 );
+
+-- Compatible con instalaciones que ya tenían creada la tabla antes de esta mejora.
+alter table public.profiles
+  add column if not exists course_state jsonb not null default '{"modules":{},"activeModuleId":null}'::jsonb;
 
 alter table public.profiles enable row level security;
 
@@ -17,7 +22,7 @@ alter table public.profiles enable row level security;
 grant usage on schema public to authenticated;
 revoke all on table public.profiles from anon, authenticated;
 grant select on table public.profiles to authenticated;
-grant update (scores, rewards, updated_at) on table public.profiles to authenticated;
+grant update (scores, rewards, course_state, updated_at) on table public.profiles to authenticated;
 
 -- La función evita que la política de administradores se evalúe de forma recursiva.
 create or replace function public.is_cyberquest_admin()

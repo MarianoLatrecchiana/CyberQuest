@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AnimatePresence, motion } from 'framer-motion';
 import { courseModules, finalQuestions } from './course-data';
@@ -14,12 +14,15 @@ const STORAGE_USERS = 'cq_react_users';
 const STORAGE_SESSION = 'cq_react_session';
 const progressStorageKey = (userId) => `cq_react_progress_${userId}`;
 const navigationStorageKey = (userId) => `cq_react_navigation_${userId}`;
+const attemptStorageKey = (userId, moduleId) => `cq_react_attempt_${userId}_${moduleId}`;
+const courseStateStorageKey = (userId) => `cq_react_course_state_${userId}`;
 
 const hangmanConcepts = [
   { word: 'RANSOMWARE', definition: 'Tipo de software malicioso que bloquea o cifra información y exige un pago para recuperarla.' },
   { word: 'PHISHING', definition: 'Engaño que busca obtener credenciales o datos mediante mensajes, sitios o enlaces falsos.' },
   { word: 'MALWARE', definition: 'Término general para programas diseñados para dañar, alterar o acceder sin autorización a un equipo.' }
 ];
+let nextHangmanConceptIndex = 0;
 
 const signalChallenges = [
   { title: 'Mensaje que apura', text: 'Te llega un WhatsApp que parece ser de una empresa conocida: “Tu paquete está retenido. Pagá ahora desde este enlace”.', answer: 'Frenar y verificar por la web o app oficial, sin abrir el enlace.', signals: ['Te apura a actuar', 'Tiene un enlace', 'Pide un pago inesperado'] },
@@ -71,8 +74,19 @@ function App() {
   const [confirmationNotice, setConfirmationNotice] = useState('');
   const [scores, setScores] = useState(() => readProgress(getSession()).scores || {});
   const [rewards, setRewards] = useState(() => readProgress(getSession()).rewards || {});
+  const courseStateRef = useRef(null);
+  const courseSaveChainRef = useRef(Promise.resolve());
+  const [courseState, setCourseState] = useState(() => {
+    const initialCourseState = readCourseState(getSession());
+    courseStateRef.current = initialCourseState;
+    return initialCourseState;
+  });
   const [selectedModule, setSelectedModule] = useState(null);
   const [courseStep, setCourseStep] = useState(0);
+  const [courseHighestStep, setCourseHighestStep] = useState(0);
+  const [courseSubstep, setCourseSubstep] = useState(0);
+  const [courseAttempt, setCourseAttempt] = useState(1);
+  const [finalAttempt, setFinalAttempt] = useState(1);
   const [teamProfiles, setTeamProfiles] = useState([]);
   const [teamStatsLoading, setTeamStatsLoading] = useState(false);
   const [teamStatsError, setTeamStatsError] = useState('');
@@ -84,8 +98,11 @@ function App() {
     : courseModules.filter((module) => (scores[module.id] || 0) >= PASS_SCORE).map((module) => module.id);
   const finalUnlocked = isAdmin || (approvedModules.length === courseModules.length && totalScore >= FINAL_UNLOCK_SCORE);
 
-  async function loadCloudUser(authUser) {
-    const { data, error } = await supabase.from('profiles').select('name, email, role, scores, rewards').eq('id', authUser.id).maybeSingle();
+  async function loadCloudUser(authUser, { showWelcome = false } = {}) {
+    let { data, error } = await supabase.from('profiles').select('name, email, role, scores, rewards, course_state').eq('id', authUser.id).maybeSingle();
+    if (error && /course_state/i.test(error.message || '')) {
+      ({ data, error } = await supabase.from('profiles').select('name, email, role, scores, rewards').eq('id', authUser.id).maybeSingle());
+    }
     if (error) {
       setNotice('No se pudo cargar tu progreso online. Revisá la configuración de Supabase.');
       setAuthReady(true);
@@ -97,7 +114,26 @@ function App() {
     const cleanRewards = Object.fromEntries(Object.entries(profile.rewards || {}).map(([moduleId, activities]) => [moduleId, [...new Set(activities || [])]]));
     setScores(Object.fromEntries(Object.entries(cleanRewards).map(([moduleId, activities]) => [moduleId, Math.min(activities.length * 20, MODULE_MAX_SCORE)])));
     setRewards(cleanRewards);
-    restoreNavigation(restoredUser.id, setScreen, setSelectedModule, setCourseStep);
+    const cloudCourseState = normalizeCourseState(profile.course_state);
+    const localCourseState = readCourseState(restoredUser);
+    const useNewerLocalCourseState = isCourseStateNewer(localCourseState, cloudCourseState);
+    const restoredCourseState = useNewerLocalCourseState ? localCourseState : cloudCourseState;
+    courseStateRef.current = restoredCourseState;
+    setCourseState(restoredCourseState);
+    localStorage.setItem(courseStateStorageKey(restoredUser.id), JSON.stringify(restoredCourseState));
+    if (useNewerLocalCourseState) queueCourseStatePersistence(restoredUser.id, restoredCourseState);
+    const activeCheckpoint = restoredCourseState.modules[restoredCourseState.activeModuleId];
+    if (activeCheckpoint && !activeCheckpoint.completed) {
+      restoreCourseCheckpoint(restoredCourseState, setScreen, setSelectedModule, setCourseStep, setCourseHighestStep, setCourseSubstep, setCourseAttempt);
+    } else if (showWelcome) {
+      setSelectedModule(null);
+      setCourseStep(0);
+      setCourseHighestStep(0);
+      setCourseSubstep(0);
+      setScreen('welcome');
+    } else {
+      restoreNavigation(restoredUser.id, setScreen, setSelectedModule, setCourseStep, setCourseAttempt);
+    }
     setAuthReady(true);
     if (new URLSearchParams(window.location.search).has('code')) {
       setConfirmationNotice('Tu correo fue confirmado satisfactoriamente. Ya podés comenzar tu recorrido.');
@@ -111,7 +147,12 @@ function App() {
       const progress = readProgress(user);
       setScores(progress.scores || {});
       setRewards(progress.rewards || {});
-      restoreNavigation(user.id, setScreen, setSelectedModule, setCourseStep);
+      const restoredCourseState = readCourseState(user);
+      courseStateRef.current = restoredCourseState;
+      setCourseState(restoredCourseState);
+      const activeCheckpoint = restoredCourseState.modules[restoredCourseState.activeModuleId];
+      if (activeCheckpoint && !activeCheckpoint.completed) restoreCourseCheckpoint(restoredCourseState, setScreen, setSelectedModule, setCourseStep, setCourseHighestStep, setCourseSubstep, setCourseAttempt);
+      else restoreNavigation(user.id, setScreen, setSelectedModule, setCourseStep, setCourseAttempt);
       return;
     }
 
@@ -135,6 +176,28 @@ function App() {
     return () => { active = false; subscription.unsubscribe(); };
   }, []);
 
+  function loadLocalUser(localUser, { showWelcome = false } = {}) {
+    setUser(localUser);
+    const progress = readProgress(localUser);
+    setScores(progress.scores || {});
+    setRewards(progress.rewards || {});
+    const restoredCourseState = readCourseState(localUser);
+    courseStateRef.current = restoredCourseState;
+    setCourseState(restoredCourseState);
+    const activeCheckpoint = restoredCourseState.modules[restoredCourseState.activeModuleId];
+    if (activeCheckpoint && !activeCheckpoint.completed) {
+      restoreCourseCheckpoint(restoredCourseState, setScreen, setSelectedModule, setCourseStep, setCourseHighestStep, setCourseSubstep, setCourseAttempt);
+    } else if (showWelcome) {
+      setSelectedModule(null);
+      setCourseStep(0);
+      setCourseHighestStep(0);
+      setCourseSubstep(0);
+      setScreen('welcome');
+    } else {
+      restoreNavigation(localUser.id, setScreen, setSelectedModule, setCourseStep, setCourseAttempt);
+    }
+  }
+
   useEffect(() => {
     if (!isSupabaseConfigured && user?.id) localStorage.setItem(progressStorageKey(user.id), JSON.stringify({ scores, rewards }));
   }, [user?.id, scores, rewards]);
@@ -142,10 +205,10 @@ function App() {
   useEffect(() => {
     if (!user?.id || screen === 'auth') return;
     const navigation = screen === 'course' && selectedModule
-      ? { screen, moduleId: selectedModule.id, step: courseStep }
+      ? { screen, moduleId: selectedModule.id, step: courseStep, attempt: courseAttempt }
       : { screen };
     localStorage.setItem(navigationStorageKey(user.id), JSON.stringify(navigation));
-  }, [user?.id, screen, selectedModule?.id, courseStep]);
+  }, [user?.id, screen, selectedModule?.id, courseStep, courseAttempt]);
 
   async function authenticate(formData) {
     const email = formData.email.trim().toLowerCase();
@@ -178,7 +241,7 @@ function App() {
       }
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) return setNotice('Correo o contraseña incorrectos.');
-      return loadCloudUser(data.user);
+      return loadCloudUser(data.user, { showWelcome: true });
     }
 
     const users = getUsers();
@@ -191,40 +254,111 @@ function App() {
       const newUser = { id: crypto.randomUUID(), name: formData.name.trim(), email, password, role: 'user' };
       localStorage.setItem(STORAGE_USERS, JSON.stringify([...users.filter((item) => item.role !== 'admin'), newUser]));
       saveSession(newUser);
-      setUser(newUser);
+      loadLocalUser(newUser, { showWelcome: true });
       return;
     }
 
     const foundUser = users.find((item) => item.email === email && item.password === password);
     if (!foundUser) return setNotice('Correo o contraseña incorrectos.');
     saveSession(foundUser);
-    setUser(foundUser);
+    loadLocalUser(foundUser, { showWelcome: true });
   }
 
   async function logout() {
+    await courseSaveChainRef.current;
     if (isSupabaseConfigured) await supabase.auth.signOut();
     localStorage.removeItem(STORAGE_SESSION);
-    if (user?.id) localStorage.removeItem(navigationStorageKey(user.id));
     setUser(null);
     setScreen('auth');
     setNotice('Sesión cerrada correctamente.');
   }
 
+  function queueCourseStatePersistence(userId, nextState) {
+    if (!userId) return Promise.resolve();
+    localStorage.setItem(courseStateStorageKey(userId), JSON.stringify(nextState));
+    if (!isSupabaseConfigured) return Promise.resolve();
+    const pendingSave = courseSaveChainRef.current.then(async () => {
+      const { error } = await supabase.from('profiles').update({ course_state: nextState, updated_at: new Date().toISOString() }).eq('id', userId);
+      if (error) throw error;
+    });
+    courseSaveChainRef.current = pendingSave.catch(() => {
+      setNotice('No se pudo guardar el recorrido del módulo online. Intentá nuevamente.');
+    });
+    return courseSaveChainRef.current;
+  }
+
+  function persistCourseState(nextState) {
+    if (!user?.id) return Promise.resolve();
+    return queueCourseStatePersistence(user.id, nextState);
+  }
+
+  function saveModuleCheckpoint(moduleId, patch, active = true) {
+    const currentCourseState = normalizeCourseState(courseStateRef.current);
+    const previous = currentCourseState.modules[moduleId] || {};
+    const nextState = {
+      activeModuleId: active ? moduleId : null,
+      modules: {
+        ...currentCourseState.modules,
+        [moduleId]: { ...previous, ...patch, updatedAt: new Date().toISOString() }
+      }
+    };
+    courseStateRef.current = nextState;
+    setCourseState(nextState);
+    persistCourseState(nextState);
+    return nextState.modules[moduleId];
+  }
+
   function openModule(module) {
+    const savedCheckpoint = normalizeCourseState(courseStateRef.current).modules[module.id];
+    if (savedCheckpoint && !savedCheckpoint.completed) {
+      setSelectedModule(module);
+      setCourseStep(Math.max(0, Math.min(6, Number(savedCheckpoint.step) || 0)));
+      setCourseHighestStep(Math.max(0, Math.min(6, Number(savedCheckpoint.highestStep) || 0)));
+      setCourseSubstep(Math.max(0, Number(savedCheckpoint.substep) || 0));
+      setCourseAttempt(Math.max(1, Number(savedCheckpoint.attempt) || 1));
+      saveModuleCheckpoint(module.id, savedCheckpoint);
+      setScreen('course');
+      return;
+    }
+    const savedAttempt = Number(savedCheckpoint?.attempt) || 0;
+    const deviceAttempt = user?.id ? Number(localStorage.getItem(attemptStorageKey(user.id, module.id)) || '0') : Math.max(0, courseAttempt - 1);
+    const nextAttempt = Math.max(savedAttempt, deviceAttempt) + 1;
+    if (user?.id) localStorage.setItem(attemptStorageKey(user.id, module.id), String(nextAttempt));
     setSelectedModule(module);
     setCourseStep(0);
-    if (user?.id) localStorage.setItem(navigationStorageKey(user.id), JSON.stringify({ screen: 'course', moduleId: module.id, step: 0 }));
+    setCourseHighestStep(0);
+    setCourseSubstep(0);
+    setCourseAttempt(nextAttempt);
+    saveModuleCheckpoint(module.id, { step: 0, highestStep: 0, substep: 0, attempt: nextAttempt, completed: false, answers: {} });
+    if (user?.id) localStorage.setItem(navigationStorageKey(user.id), JSON.stringify({ screen: 'course', moduleId: module.id, step: 0, attempt: nextAttempt }));
     setScreen('course');
   }
 
-  function rememberCourseStep(step) {
+  function rememberCourseStep(step, highestStep) {
     setCourseStep(step);
-    if (user?.id && selectedModule) localStorage.setItem(navigationStorageKey(user.id), JSON.stringify({ screen: 'course', moduleId: selectedModule.id, step }));
+    setCourseHighestStep(highestStep);
+    setCourseSubstep(0);
+    if (selectedModule) saveModuleCheckpoint(selectedModule.id, { step, highestStep, substep: 0, attempt: courseAttempt, completed: false });
+    if (user?.id && selectedModule) localStorage.setItem(navigationStorageKey(user.id), JSON.stringify({ screen: 'course', moduleId: selectedModule.id, step, attempt: courseAttempt }));
+  }
+
+  function rememberCourseSubstep(substep) {
+    setCourseSubstep(substep);
+    if (selectedModule) saveModuleCheckpoint(selectedModule.id, { step: courseStep, highestStep: courseHighestStep, substep, attempt: courseAttempt, completed: false });
+  }
+
+  function rememberCourseAnswers(answers) {
+    if (selectedModule) saveModuleCheckpoint(selectedModule.id, { step: courseStep, highestStep: courseHighestStep, substep: courseSubstep, attempt: courseAttempt, completed: false, answers });
   }
 
   function returnToModules() {
     if (user?.id) localStorage.setItem(navigationStorageKey(user.id), JSON.stringify({ screen: 'modules' }));
     setScreen('modules');
+  }
+
+  function openFinalChallenge() {
+    setFinalAttempt((current) => current + 1);
+    setScreen('final');
   }
 
   function persistProgress(nextScores, nextRewards) {
@@ -244,6 +378,9 @@ function App() {
     persistProgress(nextScores, nextRewards);
     setSelectedModule(null);
     setCourseStep(0);
+    setCourseHighestStep(0);
+    setCourseSubstep(0);
+    saveModuleCheckpoint(moduleId, { step: 6, highestStep: 6, substep: 0, attempt: courseAttempt, completed: true }, false);
     returnToModules();
   }
 
@@ -300,10 +437,10 @@ function App() {
       <AnimatePresence>{confirmationNotice && <EmailConfirmedNotice key="confirmed-email" message={confirmationNotice} onClose={() => setConfirmationNotice('')} />}</AnimatePresence>
       <AnimatePresence mode="wait">
         {screen === 'welcome' && <Welcome key="welcome" user={user} onStart={() => setScreen('modules')} />}
-        {screen === 'modules' && <MissionBoard key="modules" approved={approvedModules} scores={scores} isAdmin={isAdmin} totalScore={totalScore} finalUnlocked={finalUnlocked} onOpen={openModule} onFinal={() => setScreen('final')} onGame={(game) => setScreen(game)} />}
-        {screen === 'course' && selectedModule && <CourseFlow key={selectedModule.id} module={selectedModule} isAdmin={isAdmin} initialRewards={rewards[selectedModule.id] || []} initialStep={courseStep} onStepChange={rememberCourseStep} onProgress={saveModuleProgress} onClose={returnToModules} onFinish={finishModule} />}
+        {screen === 'modules' && <MissionBoard key="modules" approved={approvedModules} scores={scores} isAdmin={isAdmin} totalScore={totalScore} finalUnlocked={finalUnlocked} onOpen={openModule} onFinal={openFinalChallenge} onGame={(game) => setScreen(game)} />}
+        {screen === 'course' && selectedModule && <CourseFlow key={`${selectedModule.id}-${courseAttempt}`} module={selectedModule} isAdmin={isAdmin} initialRewards={rewards[selectedModule.id] || []} initialStep={courseStep} initialHighestStep={courseHighestStep} initialSubstep={courseSubstep} initialAnswers={courseState.modules[selectedModule.id]?.answers || {}} attempt={courseAttempt} onStepChange={rememberCourseStep} onSubstepChange={rememberCourseSubstep} onAnswersChange={rememberCourseAnswers} onProgress={saveModuleProgress} onClose={returnToModules} onFinish={finishModule} />}
         {screen === 'stats' && <StatisticsPage key="stats" scores={scores} isAdmin={isAdmin} teamProfiles={teamProfiles} loading={teamStatsLoading} error={teamStatsError} onRefresh={openStatistics} onClose={() => setScreen('modules')} />}
-        {screen === 'final' && <FinalChallenge key="final" onClose={() => setScreen('modules')} />}
+        {screen === 'final' && <FinalChallenge key={`final-${finalAttempt}`} attempt={finalAttempt} onClose={returnToModules} />}
         {screen === 'hangman' && <HangmanGame key="hangman" onClose={() => setScreen('modules')} />}
         {screen === 'signals' && <SignalsGame key="signals" onClose={() => setScreen('modules')} />}
       </AnimatePresence>
@@ -344,27 +481,63 @@ function AuthScreen({ mode, notice, onModeChange, onSubmit }) {
   );
 }
 
+function normalizeCourseState(value) {
+  const raw = value && typeof value === 'object' ? value : {};
+  const modules = raw.modules && typeof raw.modules === 'object' ? raw.modules : {};
+  return { activeModuleId: typeof raw.activeModuleId === 'string' ? raw.activeModuleId : null, modules };
+}
+
+function courseStateUpdatedAt(courseState) {
+  return Math.max(0, ...Object.values(normalizeCourseState(courseState).modules).map((checkpoint) => Date.parse(checkpoint?.updatedAt || '') || 0));
+}
+
+function isCourseStateNewer(candidate, baseline) {
+  return courseStateUpdatedAt(candidate) > courseStateUpdatedAt(baseline);
+}
+
+function readCourseState(user) {
+  if (!user?.id) return normalizeCourseState();
+  try { return normalizeCourseState(JSON.parse(localStorage.getItem(courseStateStorageKey(user.id)) || '{}')); } catch { return normalizeCourseState(); }
+}
+
 function readNavigation(userId) {
   if (!userId) return null;
   try { return JSON.parse(localStorage.getItem(navigationStorageKey(userId)) || 'null'); } catch { return null; }
 }
 
-function restoreNavigation(userId, setScreen, setSelectedModule, setCourseStep) {
+function restoreNavigation(userId, setScreen, setSelectedModule, setCourseStep, setCourseAttempt) {
   const saved = readNavigation(userId);
   if (saved?.screen === 'course') {
     const module = courseModules.find((item) => item.id === saved.moduleId);
     if (module) {
       setSelectedModule(module);
       setCourseStep(Math.max(0, Math.min(6, Number(saved.step) || 0)));
+      setCourseAttempt(Math.max(1, Number(saved.attempt) || 1));
       setScreen('course');
       return;
     }
   }
-  if (['hangman', 'signals', 'stats', 'final'].includes(saved?.screen)) {
+  if (['welcome', 'hangman', 'signals', 'stats', 'final'].includes(saved?.screen)) {
     setScreen(saved.screen);
     return;
   }
   setScreen('modules');
+}
+
+function restoreCourseCheckpoint(courseState, setScreen, setSelectedModule, setCourseStep, setCourseHighestStep, setCourseSubstep, setCourseAttempt) {
+  const moduleId = courseState.activeModuleId;
+  const checkpoint = courseState.modules[moduleId];
+  const module = courseModules.find((item) => item.id === moduleId);
+  if (!module || !checkpoint || checkpoint.completed) {
+    setScreen('modules');
+    return;
+  }
+  setSelectedModule(module);
+  setCourseStep(Math.max(0, Math.min(6, Number(checkpoint.step) || 0)));
+  setCourseHighestStep(Math.max(0, Math.min(6, Number(checkpoint.highestStep) || 0)));
+  setCourseSubstep(Math.max(0, Number(checkpoint.substep) || 0));
+  setCourseAttempt(Math.max(1, Number(checkpoint.attempt) || 1));
+  setScreen('course');
 }
 
 function PasswordRecoveryScreen({ notice, onSubmit }) {
@@ -440,13 +613,40 @@ function HangmanLoopIcon() {
   return <svg className="cq-hangman-loop" viewBox="0 0 64 64" aria-hidden="true"><path d="M10 55h44M20 55V10h25M45 10v10" /><motion.g animate={{ rotate: [-3, 3, -3] }} transition={{ duration: 1.7, repeat: Infinity, ease: 'easeInOut' }} style={{ transformOrigin: '45px 24px' }}><circle cx="45" cy="27" r="6" /><path d="M45 33v13m0-9-7 6m7-6 7 6m-7 3-6 7m6-7 6 7" /></motion.g></svg>;
 }
 
-function CourseFlow({ module, isAdmin, initialRewards, initialStep, onStepChange, onProgress, onClose, onFinish }) {
+function rotateItems(items, amount) {
+  const normalized = ((amount % items.length) + items.length) % items.length;
+  return [...items.slice(normalized), ...items.slice(0, normalized)];
+}
+
+function reorderQuestion(item, attempt = 0, variation = 0) {
+  const correctOption = item.options[item.answer];
+  const distractors = rotateItems(item.options.filter((_, index) => index !== item.answer), attempt + variation);
+  const correctIndex = (attempt + variation) % item.options.length;
+  const options = [...distractors];
+  options.splice(correctIndex, 0, correctOption);
+  return { ...item, options, answer: correctIndex };
+}
+
+function CourseFlow({ module, isAdmin, initialRewards, initialStep, initialHighestStep, initialSubstep, initialAnswers, attempt, onStepChange, onSubstepChange, onAnswersChange, onProgress, onClose, onFinish }) {
   const [step, setStep] = useState(() => Math.max(0, Math.min(6, initialStep || 0)));
   const [rewardedActivities, setRewardedActivities] = useState(() => new Set(initialRewards));
   const [score, setScore] = useState(() => Math.min(new Set(initialRewards).size * 20, MODULE_MAX_SCORE));
-  const [highestStep, setHighestStep] = useState(() => Math.max(0, Math.min(6, initialStep || 0)));
-  const labels = ['1. Aprendé', '2. Decidí', '3. Aprendé', '4. Decidí', '5. Trivia', '6. Aprendé', '7. Trivia'];
-  const moveToStep = (next) => { setHighestStep((current) => Math.max(current, next)); setStep(next); onStepChange(next); };
+  const [highestStep, setHighestStep] = useState(() => Math.max(0, Math.min(6, initialHighestStep ?? initialStep ?? 0)));
+  const [answers, setAnswers] = useState(() => initialAnswers || {});
+  const rotatingChallenges = useMemo(() => rotateItems([
+    { kind: 'scenario', scenarioIndex: 0, label: 'Decidí' },
+    { kind: 'scenario', scenarioIndex: 1, label: 'Decidí' },
+    { kind: 'quiz', questions: module.quizzes.slice(0, 3), prefix: 'quiz', title: 'Trivia', label: 'Trivia' },
+    { kind: 'quiz', questions: module.quizzes.slice(3), prefix: 'final-quiz', title: 'Trivia final', label: 'Trivia' }
+  ], attempt - 1), [module, attempt]);
+  const flow = [{ kind: 'learn', phase: 0, label: 'Aprendé' }, rotatingChallenges[0], { kind: 'learn', phase: 1, label: 'Aprendé' }, rotatingChallenges[1], rotatingChallenges[2], { kind: 'learn', phase: 2, label: 'Aprendé' }, rotatingChallenges[3]];
+  const moveToStep = (next) => { const nextHighest = Math.max(highestStep, next); setHighestStep(nextHighest); setStep(next); onStepChange(next, nextHighest); };
+  const rememberAnswer = (activityId, answer) => {
+    if (Object.prototype.hasOwnProperty.call(answers, activityId)) return;
+    const nextAnswers = { ...answers, [activityId]: answer };
+    setAnswers(nextAnswers);
+    onAnswersChange(nextAnswers);
+  };
   const addPoint = (activityId) => {
     if (rewardedActivities.has(activityId)) return;
     const nextRewards = new Set([...rewardedActivities, activityId]);
@@ -454,27 +654,25 @@ function CourseFlow({ module, isAdmin, initialRewards, initialStep, onStepChange
     setScore(nextRewards.size * 20);
     onProgress(module.id, [...nextRewards]);
   };
-  const current = step === 0 ? <LearnBlock module={module} phase={0} onCorrect={() => addPoint('learn-0')} onNext={() => moveToStep(1)} />
-    : step === 1 ? <ScenarioBlock module={module} scenario={module.scenarios[0]} onCorrect={() => addPoint('scenario-0')} onNext={() => moveToStep(2)} />
-      : step === 2 ? <LearnBlock module={module} phase={1} onCorrect={() => addPoint('learn-1')} onNext={() => moveToStep(3)} />
-        : step === 3 ? <ScenarioBlock module={module} scenario={module.scenarios[1]} onCorrect={() => addPoint('scenario-1')} onNext={() => moveToStep(4)} />
-          : step === 4 ? <QuizBlock questions={module.quizzes.slice(0, 3)} title="Trivia" activityPrefix="quiz" onCorrect={(questionIndex) => addPoint(`quiz-${questionIndex}`)} onNext={() => moveToStep(5)} />
-            : step === 5 ? <LearnBlock module={module} phase={2} onCorrect={() => addPoint('learn-2')} onNext={() => moveToStep(6)} />
-              : <QuizBlock questions={module.quizzes.slice(3)} title="Trivia final" activityPrefix="final-quiz" onCorrect={(questionIndex) => addPoint(`final-quiz-${questionIndex}`)} onNext={() => onFinish(module.id, score, [...rewardedActivities])} />;
-  return <motion.section className="cq-course" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}><button className="cq-back" onClick={onClose}>← Misiones</button><header className="cq-course-header"><span>{module.icon}</span><div><h1>{module.title}</h1><p>{module.subtitle}</p></div><b><PointsBadge value={`${score} / ${MODULE_MAX_SCORE}`} /></b></header><nav className="cq-stepper">{labels.map((label, index) => <button key={label} className={index === step ? 'active' : ''} disabled={!isAdmin && index > highestStep} onClick={() => moveToStep(index)}>{label}</button>)}</nav><AnimatePresence mode="wait"><motion.div key={step} initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -18 }}>{current}</motion.div></AnimatePresence></motion.section>;
+  const currentItem = flow[step];
+  const nextLabel = flow[step + 1]?.label;
+  const current = currentItem.kind === 'learn' ? <LearnBlock module={module} phase={currentItem.phase} attempt={attempt} nextLabel={nextLabel} savedAnswer={answers[`learn-${currentItem.phase}`]} onAnswered={(answer) => rememberAnswer(`learn-${currentItem.phase}`, answer)} onCorrect={() => addPoint(`learn-${currentItem.phase}`)} onNext={() => moveToStep(step + 1)} />
+    : currentItem.kind === 'scenario' ? <ScenarioBlock scenario={module.scenarios[currentItem.scenarioIndex]} attempt={attempt} variation={currentItem.scenarioIndex} savedAnswer={answers[`scenario-${currentItem.scenarioIndex}`]} onAnswered={(answer) => rememberAnswer(`scenario-${currentItem.scenarioIndex}`, answer)} onCorrect={() => addPoint(`scenario-${currentItem.scenarioIndex}`)} onNext={() => moveToStep(step + 1)} />
+      : <QuizBlock questions={currentItem.questions} title={currentItem.title} activityPrefix={currentItem.prefix} attempt={attempt} variation={step} initialIndex={initialSubstep} answers={answers} onIndexChange={onSubstepChange} onAnswered={rememberAnswer} onCorrect={(questionIndex) => addPoint(`${currentItem.prefix}-${questionIndex}`)} onNext={() => step === flow.length - 1 ? onFinish(module.id, score, [...rewardedActivities]) : moveToStep(step + 1)} />;
+  return <motion.section className="cq-course" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}><button className="cq-back" onClick={onClose}>← Misiones</button><header className="cq-course-header"><span>{module.icon}</span><div><h1>{module.title}</h1><p>{module.subtitle}</p></div><b><PointsBadge value={`${score} / ${MODULE_MAX_SCORE}`} /></b></header><nav className="cq-stepper">{flow.map((item, index) => <button key={`${item.kind}-${index}`} className={index === step ? 'active' : ''} disabled={!isAdmin && index > highestStep} onClick={() => moveToStep(index)}>{index + 1}. {item.label}</button>)}</nav><AnimatePresence mode="wait"><motion.div key={`${step}-${currentItem.kind}-${currentItem.scenarioIndex ?? currentItem.prefix ?? currentItem.phase}`} initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -18 }}>{current}</motion.div></AnimatePresence></motion.section>;
 }
 
-function LearnBlock({ module, phase, onCorrect, onNext }) {
-  const [answered, setAnswered] = useState(false);
-  const mini = module.minis[phase];
+function LearnBlock({ module, phase, attempt, nextLabel, savedAnswer, onAnswered, onCorrect, onNext }) {
+  const [answered, setAnswered] = useState(() => savedAnswer !== undefined);
+  const mini = module.minis[(phase + attempt - 1) % module.minis.length];
   const details = phase === 0 ? [module.learn.details[0]] : phase === 1 ? [module.learn.details[1]] : module.learn.details.slice(2);
   const pointGroups = [[0], [1, 2], [3]];
   const title = module.learn.phaseTitles?.[phase] || (phase === 0 ? module.learn.title : phase === 1 ? 'Profundizá el concepto' : 'Llevá el conocimiento a la práctica');
-  return <article className="cq-activity"><p className="cq-kicker">CONTENIDO EDUCATIVO · BLOQUE {phase + 1} DE 3</p><h2>{title}</h2>{phase === 0 && <p className="cq-activity-lead">{module.learn.intro}</p>}{details.map((detail) => <p className="cq-detail" key={detail}>{detail}</p>)}<div className="cq-learning-points">{pointGroups[phase].map((index) => module.learn.points[index]).filter(Boolean).map(([title, text]) => <div key={title}><b>{title}</b><span>{text}</span></div>)}</div><QuestionCard eyebrow={<>MINI DESAFÍO <PointsBadge value={20} /></>} item={mini} onCorrect={onCorrect} onAnswered={() => setAnswered(true)} />{answered && <button className="cq-primary" onClick={onNext}>{phase === 0 ? 'Ir a la situación →' : phase === 1 ? 'Ver la próxima situación →' : 'Ir a la trivia final →'}</button>}</article>;
+  return <article className="cq-activity"><p className="cq-kicker">CONTENIDO EDUCATIVO · BLOQUE {phase + 1} DE 3</p><h2>{title}</h2>{phase === 0 && <p className="cq-activity-lead">{module.learn.intro}</p>}{details.map((detail) => <p className="cq-detail" key={detail}>{detail}</p>)}<div className="cq-learning-points">{pointGroups[phase].map((index) => module.learn.points[index]).filter(Boolean).map(([title, text]) => <div key={title}><b>{title}</b><span>{text}</span></div>)}</div><QuestionCard eyebrow={<>MINI DESAFÍO <PointsBadge value={20} /></>} item={mini} attempt={attempt} variation={phase} savedAnswer={savedAnswer} onCorrect={onCorrect} onAnswered={(answer) => { onAnswered(answer); setAnswered(true); }} />{answered && <button className="cq-primary" onClick={onNext}>Continuar con {nextLabel} →</button>}</article>;
 }
 
-function ScenarioBlock({ scenario, onCorrect, onNext }) {
-  const [answered, setAnswered] = useState(false);
+function ScenarioBlock({ scenario, attempt, variation, savedAnswer, onAnswered, onCorrect, onNext }) {
+  const [answered, setAnswered] = useState(() => savedAnswer !== undefined);
   const chatMatch = scenario.text.match(/^(.*?te escribe(?: por chat)?):\s*[“"](.+?)[”"]$/);
   const isChat = Boolean(scenario.person && chatMatch);
   const context = chatMatch?.[1] || '';
@@ -489,26 +687,34 @@ function ScenarioBlock({ scenario, onCorrect, onNext }) {
   const picture = scenario.visual?.includes('/') ? <img src={scenario.visual} alt={scenario.person || 'Persona de la situación'} /> : <span className={`cq-scenario-emoji ${scenario.visual === '☎️' ? 'is-phone' : ''}`}>{scenario.visual}</span>;
   const avatarClass = `cq-person-avatar ${scenario.visual?.includes('/') ? '' : 'has-emoji'}`;
   const chat = isChat ? <><p className="cq-chat-context">{context}:</p><section className="cq-chat-window"><header><div className={avatarClass}>{picture}</div><div><b>{scenario.person.split(' · ')[0]}</b><small>● En línea</small></div><span>•••</span></header><div className="cq-chat-thread"><time>Ahora</time>{messageVisible ? <motion.p className="cq-chat-message" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>{message}<small>✓✓</small></motion.p> : <div className="cq-typing"><i /><i /><i /></div>}</div></section></> : <section className={`cq-dialogue-scene ${scenario.note ? 'has-note' : ''}`}><div className={avatarClass}>{picture}</div><div className="cq-chat-content"><span>{scenario.person || 'Situación para analizar'}</span><p>{scenario.text}</p>{scenario.note && <motion.div className="cq-password-note" initial={{ opacity: 0, rotate: -7, y: 10 }} animate={{ opacity: 1, rotate: -3, y: 0 }}><small>NOTA ENCONTRADA</small><b>{scenario.note}</b></motion.div>}</div></section>;
-  return <article className="cq-activity"><p className="cq-kicker">SITUACIÓN COTIDIANA <PointsBadge value={20} /></p><h2>{scenario.title}</h2>{chat}{messageVisible && <QuestionCard item={{ prompt: '¿Qué harías en este caso?', options: scenario.options, answer: scenario.answer, feedback: scenario.feedback }} onCorrect={onCorrect} onAnswered={() => setAnswered(true)} />}{answered && <button className="cq-primary" onClick={onNext}>Continuar →</button>}</article>;
+  return <article className="cq-activity"><p className="cq-kicker">SITUACIÓN COTIDIANA <PointsBadge value={20} /></p><h2>{scenario.title}</h2>{chat}{messageVisible && <QuestionCard item={{ prompt: '¿Qué harías en este caso?', options: scenario.options, answer: scenario.answer, feedback: scenario.feedback }} attempt={attempt} variation={variation} savedAnswer={savedAnswer} onCorrect={onCorrect} onAnswered={(answer) => { onAnswered(answer); setAnswered(true); }} />}{answered && <button className="cq-primary" onClick={onNext}>Continuar →</button>}</article>;
 }
 
-function QuizBlock({ questions, title, activityPrefix, onCorrect, onNext }) {
-  const [index, setIndex] = useState(0);
-  const [answered, setAnswered] = useState(false);
+function QuizBlock({ questions, title, activityPrefix, attempt, variation, initialIndex, answers, onIndexChange, onAnswered, onCorrect, onNext }) {
+  const [index, setIndex] = useState(() => Math.max(0, Math.min(questions.length - 1, initialIndex || 0)));
+  const activityId = `${activityPrefix}-${index}`;
+  const [answered, setAnswered] = useState(() => Object.prototype.hasOwnProperty.call(answers, activityId));
   const last = index === questions.length - 1;
-  function next() { if (last) onNext(); else { setIndex((current) => current + 1); setAnswered(false); } }
-  return <article className="cq-activity"><p className="cq-kicker">{title.toUpperCase()} · PREGUNTA {index + 1} DE {questions.length} <PointsBadge value={20} /></p><QuestionCard key={questions[index].prompt} item={questions[index]} onCorrect={() => onCorrect(index)} onAnswered={() => setAnswered(true)} />{answered && <button className="cq-primary" onClick={next}>{last ? 'Ver resultado del módulo →' : 'Siguiente pregunta →'}</button>}</article>;
+  function next() { if (last) onNext(); else { const nextIndex = index + 1; setIndex(nextIndex); onIndexChange(nextIndex); setAnswered(Object.prototype.hasOwnProperty.call(answers, `${activityPrefix}-${nextIndex}`)); } }
+  return <article className="cq-activity"><p className="cq-kicker">{title.toUpperCase()} · PREGUNTA {index + 1} DE {questions.length} <PointsBadge value={20} /></p><QuestionCard key={questions[index].prompt} item={questions[index]} attempt={attempt} variation={variation + index} savedAnswer={answers[activityId]} onCorrect={() => onCorrect(index)} onAnswered={(answer) => { onAnswered(activityId, answer); setAnswered(true); }} />{answered && <button className="cq-primary" onClick={next}>{last ? 'Ver resultado del módulo →' : 'Siguiente pregunta →'}</button>}</article>;
 }
 
-function QuestionCard({ eyebrow, item, onCorrect, onAnswered }) {
-  const [answer, setAnswer] = useState(null);
+function QuestionCard({ eyebrow, item, attempt = 0, variation = 0, savedAnswer, onCorrect, onAnswered }) {
+  const displayedItem = useMemo(() => reorderQuestion(item, attempt, variation), [item, attempt, variation]);
+  const restoredAnswer = displayedItem.options.indexOf(savedAnswer);
+  const [answer, setAnswer] = useState(() => restoredAnswer >= 0 ? restoredAnswer : null);
   const complete = answer !== null;
-  function choose(index) { if (complete) return; setAnswer(index); if (index === item.answer) onCorrect(); onAnswered(); }
-  return <section className="cq-question-card">{eyebrow && <p className="cq-kicker">{eyebrow}</p>}<h3>{item.prompt}</h3><div className="cq-options">{item.options.map((option, index) => <button key={option} disabled={complete} className={complete ? index === item.answer ? 'correct' : index === answer ? 'wrong' : '' : ''} onClick={() => choose(index)}><b>{String.fromCharCode(65 + index)}.</b> {option}</button>)}</div>{complete && <p className={`cq-feedback ${answer === item.answer ? 'good' : 'bad'}`}><b>{answer === item.answer ? '¡Muy bien! ' : 'Para recordar: '}</b>{item.feedback}</p>}</section>;
+  function choose(index) { if (complete) return; setAnswer(index); if (index === displayedItem.answer) onCorrect(); onAnswered(displayedItem.options[index]); }
+  return <section className="cq-question-card">{eyebrow && <p className="cq-kicker">{eyebrow}</p>}<h3>{displayedItem.prompt}</h3><div className="cq-options">{displayedItem.options.map((option, index) => <button key={option} disabled={complete} className={complete ? index === displayedItem.answer ? 'correct' : index === answer ? 'wrong' : '' : ''} onClick={() => choose(index)}><b>{String.fromCharCode(65 + index)}.</b> {option}</button>)}</div>{complete && <p className={`cq-feedback ${answer === displayedItem.answer ? 'good' : 'bad'}`}><b>{answer === displayedItem.answer ? '¡Muy bien! ' : 'Para recordar: '}</b>{displayedItem.feedback}</p>}</section>;
 }
 
 function HangmanGame({ onClose }) {
-  const [concept, setConcept] = useState(() => hangmanConcepts[Math.floor(Math.random() * hangmanConcepts.length)]);
+  const [conceptIndex, setConceptIndex] = useState(() => {
+    const index = nextHangmanConceptIndex % hangmanConcepts.length;
+    nextHangmanConceptIndex += 1;
+    return index;
+  });
+  const concept = hangmanConcepts[conceptIndex];
   const [guessed, setGuessed] = useState([]);
   const [errors, setErrors] = useState(0);
   const letters = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ'.split('');
@@ -522,8 +728,7 @@ function HangmanGame({ onClose }) {
     if (!concept.word.includes(normalized)) setErrors((current) => current + 1);
   };
   const newConcept = () => {
-    const options = hangmanConcepts.filter((item) => item.word !== concept.word);
-    setConcept(options[Math.floor(Math.random() * options.length)] || hangmanConcepts[0]);
+    setConceptIndex((current) => (current + 1) % hangmanConcepts.length);
     setGuessed([]);
     setErrors(0);
   };
@@ -541,12 +746,15 @@ function SignalsGame({ onClose }) {
   const [score, setScore] = useState(0);
   const [finished, setFinished] = useState(false);
   const [messageVisible, setMessageVisible] = useState(false);
-  const item = signalChallenges[index];
-  const isWhatsAppChallenge = index === 0;
-  const isApprovalChallenge = index === 1;
-  const isPendriveChallenge = index === 2;
+  const [round, setRound] = useState(1);
+  const challenges = useMemo(() => rotateItems(signalChallenges, round - 1), [round]);
+  const item = challenges[index];
+  const isWhatsAppChallenge = item.title === 'Mensaje que apura';
+  const isApprovalChallenge = item.title === 'Aprobación inesperada';
+  const isPendriveChallenge = item.title === 'Pendrive encontrado';
   const baseOptions = [{ text: item.answer, isCorrect: true }, { text: 'Abrirlo o conectarlo para comprobar si realmente hay un problema.', isCorrect: false }, { text: item.thirdOption || 'Esperar, porque si fuera importante alguien volverá a escribir.', isCorrect: false }];
-  const options = (signalOptionOrders[item.title] || [0, 1, 2]).map((optionIndex) => baseOptions[optionIndex]);
+  const reorderedOptions = reorderQuestion({ options: baseOptions.map((option) => option.text), answer: 0 }, round, index);
+  const options = reorderedOptions.options.map((text, optionIndex) => ({ text, isCorrect: optionIndex === reorderedOptions.answer }));
   const correct = answer !== null && options[answer]?.isCorrect;
   useEffect(() => {
     setMessageVisible(!isWhatsAppChallenge);
@@ -560,23 +768,24 @@ function SignalsGame({ onClose }) {
     : isPendriveChallenge ? <motion.figure className="cq-pendrive-photo" initial={{ opacity: 0, scale: .985 }} animate={{ opacity: 1, scale: 1 }}><img src={`${import.meta.env.BASE_URL}found-pendrive-office.png`} alt="Una mujer alcanza un pendrive sin identificar en el piso de una oficina" /><figcaption>Un pendrive sin identificar aparece cerca de la entrada de la oficina.</figcaption></motion.figure>
     : <section className="cq-signal-situation"><span>💬</span><p>{item.text}</p></section>;
   const continueGame = () => {
-    if (index === signalChallenges.length - 1) setFinished(true);
+    if (index === challenges.length - 1) setFinished(true);
     else { setIndex((current) => current + 1); setAnswer(null); }
   };
-  const restart = () => { setIndex(0); setAnswer(null); setScore(0); setFinished(false); };
-  if (finished) return <section className="cq-game-page"><button className="cq-back" onClick={onClose}>← Mis misiones</button><motion.article className="cq-game-result" initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }}><span>🔎</span><p className="cq-kicker">MIRADA ENTRENADA</p><h1>{score} de {signalChallenges.length} señales resueltas</h1><p>{score === signalChallenges.length ? 'Reconociste cuándo conviene frenar y verificar. Esa pausa puede evitar muchos engaños.' : 'Frente a la urgencia o a algo inesperado, frená, verificá por un canal conocido y pedí ayuda.'}</p><div><button className="cq-primary" onClick={restart}>Jugar de nuevo →</button><button className="cq-secondary" onClick={onClose}>Volver a misiones</button></div></motion.article></section>;
-  return <section className="cq-game-page"><button className="cq-back" onClick={onClose}>← Mis misiones</button><header className="cq-game-header"><span>🔎</span><div><p className="cq-kicker">MINIJUEGO INTERACTIVO · {index + 1} DE {signalChallenges.length}</p><h1>Detectá las señales</h1><p>Observá la situación y elegí la respuesta más segura.</p></div></header><motion.article key={item.title} className="cq-signals-card" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }}><h2>{item.title}</h2>{situation}<p className="cq-kicker">SEÑALES PARA DETECTAR</p><div className="cq-signal-list">{item.signals.map((signal, signalIndex) => <motion.div key={signal} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: signalIndex * .12 }}><small>SEÑAL N.º {signalIndex + 1}</small><b>{signal}</b></motion.div>)}</div><h3>¿Cuál es la respuesta más segura?</h3><div className="cq-options">{options.map((option, optionIndex) => <button key={option.text} disabled={answer !== null} className={answer !== null ? option.isCorrect ? 'correct' : optionIndex === answer ? 'wrong' : '' : ''} onClick={() => { setAnswer(optionIndex); if (option.isCorrect) setScore((current) => current + 1); }}><b>{String.fromCharCode(65 + optionIndex)}.</b> {option.text}</button>)}</div>{answer !== null && <motion.div className={`cq-feedback ${correct ? 'good' : 'bad'}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}><b>{correct ? '¡Bien visto! ' : 'Para recordar: '}</b>{item.answer}</motion.div>}{answer !== null && <button className="cq-primary cq-next-game" onClick={continueGame}>{index === signalChallenges.length - 1 ? 'Ver resultado →' : 'Siguiente situación →'}</button>}</motion.article></section>;
+  const restart = () => { setRound((current) => current + 1); setIndex(0); setAnswer(null); setScore(0); setFinished(false); };
+  if (finished) return <section className="cq-game-page"><button className="cq-back" onClick={onClose}>← Mis misiones</button><motion.article className="cq-game-result" initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }}><span>🔎</span><p className="cq-kicker">MIRADA ENTRENADA</p><h1>{score} de {challenges.length} señales resueltas</h1><p>{score === challenges.length ? 'Reconociste cuándo conviene frenar y verificar. Esa pausa puede evitar muchos engaños.' : 'Frente a la urgencia o a algo inesperado, frená, verificá por un canal conocido y pedí ayuda.'}</p><div><button className="cq-primary" onClick={restart}>Jugar de nuevo →</button><button className="cq-secondary" onClick={onClose}>Volver a misiones</button></div></motion.article></section>;
+  return <section className="cq-game-page"><button className="cq-back" onClick={onClose}>← Misiones</button><header className="cq-game-header"><span>🔎</span><div><p className="cq-kicker">MINIJUEGO INTERACTIVO · {index + 1} DE {challenges.length}</p><h1>Detectá las señales</h1><p>Observá la situación y elegí la respuesta más segura.</p></div></header><motion.article key={item.title} className="cq-signals-card" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }}><h2>{item.title}</h2>{situation}<p className="cq-kicker">SEÑALES PARA DETECTAR</p><div className="cq-signal-list">{item.signals.map((signal, signalIndex) => <motion.div key={signal} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: signalIndex * .12 }}><small>SEÑAL N.º {signalIndex + 1}</small><b>{signal}</b></motion.div>)}</div><h3>¿Cuál es la respuesta más segura?</h3><div className="cq-options">{options.map((option, optionIndex) => <button key={option.text} disabled={answer !== null} className={answer !== null ? option.isCorrect ? 'correct' : optionIndex === answer ? 'wrong' : '' : ''} onClick={() => { setAnswer(optionIndex); if (option.isCorrect) setScore((current) => current + 1); }}><b>{String.fromCharCode(65 + optionIndex)}.</b> {option.text}</button>)}</div>{answer !== null && <motion.div className={`cq-feedback ${correct ? 'good' : 'bad'}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}><b>{correct ? '¡Bien visto! ' : 'Para recordar: '}</b>{item.answer}</motion.div>}{answer !== null && <button className="cq-primary cq-next-game" onClick={continueGame}>{index === challenges.length - 1 ? 'Ver resultado →' : 'Siguiente situación →'}</button>}</motion.article></section>;
 }
 
-function FinalChallenge({ onClose }) {
+function FinalChallenge({ attempt, onClose }) {
   const [index, setIndex] = useState(0);
   const [answered, setAnswered] = useState(false);
   const [correct, setCorrect] = useState(0);
   const [finished, setFinished] = useState(false);
-  const item = finalQuestions[index];
-  function next() { if (index === finalQuestions.length - 1) setFinished(true); else { setIndex((current) => current + 1); setAnswered(false); } }
-  if (finished) return <section className="cq-course"><button className="cq-back" onClick={onClose}>← Mis misiones</button><article className="cq-activity cq-result"><span>🏆</span><p className="cq-kicker">RESULTADO INTEGRAL</p><h1>{correct} de {finalQuestions.length} respuestas correctas</h1><p>{correct >= 8 ? 'Excelente desempeño: aplicaste prácticas seguras en la mayoría de las situaciones.' : 'Repasá los módulos que te resultaron más difíciles. Cada intento fortalece tus decisiones cotidianas.'}</p><button className="cq-primary" onClick={onClose}>Volver a mis módulos →</button></article></section>;
-  return <section className="cq-course"><button className="cq-back" onClick={onClose}>← Mis misiones</button><header className="cq-course-header"><span>🏆</span><div><h1>Desafío final</h1><p>Una evaluación integral de los seis módulos.</p></div></header><article className="cq-activity"><p className="cq-kicker">EVALUACIÓN INTEGRAL · {index + 1} DE {finalQuestions.length}</p><QuestionCard key={item.prompt} item={item} onCorrect={() => setCorrect((value) => value + 1)} onAnswered={() => setAnswered(true)} />{answered && <button className="cq-primary" onClick={next}>{index === finalQuestions.length - 1 ? 'Ver resultado final →' : 'Siguiente desafío →'}</button>}</article></section>;
+  const questions = useMemo(() => rotateItems(finalQuestions, attempt - 1), [attempt]);
+  const item = questions[index];
+  function next() { if (index === questions.length - 1) setFinished(true); else { setIndex((current) => current + 1); setAnswered(false); } }
+  if (finished) return <section className="cq-course"><button className="cq-back" onClick={onClose}>← Misiones</button><article className="cq-activity cq-result"><span>🏆</span><p className="cq-kicker">RESULTADO INTEGRAL</p><h1>{correct} de {questions.length} respuestas correctas</h1><p>{correct >= 8 ? 'Excelente desempeño: aplicaste prácticas seguras en la mayoría de las situaciones.' : 'Repasá los módulos que te resultaron más difíciles. Cada intento fortalece tus decisiones cotidianas.'}</p><button className="cq-primary" onClick={onClose}>Volver a mis módulos →</button></article></section>;
+  return <section className="cq-course"><button className="cq-back" onClick={onClose}>← Misiones</button><header className="cq-course-header"><span>🏆</span><div><h1>Desafío final</h1><p>Una evaluación integral de los seis módulos.</p></div></header><article className="cq-activity"><p className="cq-kicker">EVALUACIÓN INTEGRAL · {index + 1} DE {questions.length}</p><QuestionCard key={item.prompt} item={item} attempt={attempt} variation={index} onCorrect={() => setCorrect((value) => value + 1)} onAnswered={() => setAnswered(true)} />{answered && <button className="cq-primary" onClick={next}>{index === questions.length - 1 ? 'Ver resultado final →' : 'Siguiente desafío →'}</button>}</article></section>;
 }
 
 createRoot(document.getElementById('root')).render(<App />);
