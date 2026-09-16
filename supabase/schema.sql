@@ -19,9 +19,27 @@ revoke all on table public.profiles from anon, authenticated;
 grant select on table public.profiles to authenticated;
 grant update (scores, rewards, updated_at) on table public.profiles to authenticated;
 
+-- La función evita que la política de administradores se evalúe de forma recursiva.
+create or replace function public.is_cyberquest_admin()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'admin'
+  );
+$$;
+
+grant execute on function public.is_cyberquest_admin() to authenticated;
+
 drop policy if exists "Profiles: users can read their own" on public.profiles;
-create policy "Profiles: users can read their own"
-  on public.profiles for select to authenticated using (auth.uid() = id);
+drop policy if exists "Profiles: users and admins can read" on public.profiles;
+create policy "Profiles: users and admins can read"
+  on public.profiles for select to authenticated
+  using (auth.uid() = id or public.is_cyberquest_admin());
 
 drop policy if exists "Profiles: users can update their own" on public.profiles;
 create policy "Profiles: users can update their own"

@@ -13,6 +13,7 @@ const FINAL_UNLOCK_SCORE = 840;
 const STORAGE_USERS = 'cq_react_users';
 const STORAGE_SESSION = 'cq_react_session';
 const progressStorageKey = (userId) => `cq_react_progress_${userId}`;
+const navigationStorageKey = (userId) => `cq_react_navigation_${userId}`;
 
 const hangmanConcepts = [
   { word: 'RANSOMWARE', definition: 'Tipo de software malicioso que bloquea o cifra información y exige un pago para recuperarla.' },
@@ -50,7 +51,10 @@ function saveSession(user) {
 function readProgress(user) {
   if (!user?.id) return { scores: {}, rewards: {} };
   try {
-    return JSON.parse(localStorage.getItem(progressStorageKey(user.id)) || '{"scores":{},"rewards":{}}');
+    const progress = JSON.parse(localStorage.getItem(progressStorageKey(user.id)) || '{"scores":{},"rewards":{}}');
+    const rewards = Object.fromEntries(Object.entries(progress.rewards || {}).map(([moduleId, activities]) => [moduleId, [...new Set(activities || [])]]));
+    const scores = Object.fromEntries(Object.entries(rewards).map(([moduleId, activities]) => [moduleId, Math.min(activities.length * 20, MODULE_MAX_SCORE)]));
+    return { scores, rewards };
   } catch {
     return { scores: {}, rewards: {} };
   }
@@ -68,6 +72,10 @@ function App() {
   const [scores, setScores] = useState(() => readProgress(getSession()).scores || {});
   const [rewards, setRewards] = useState(() => readProgress(getSession()).rewards || {});
   const [selectedModule, setSelectedModule] = useState(null);
+  const [courseStep, setCourseStep] = useState(0);
+  const [teamProfiles, setTeamProfiles] = useState([]);
+  const [teamStatsLoading, setTeamStatsLoading] = useState(false);
+  const [teamStatsError, setTeamStatsError] = useState('');
 
   const isAdmin = user?.role === 'admin';
   const totalScore = isAdmin ? 1200 : Object.values(scores).reduce((sum, score) => sum + score, 0);
@@ -84,10 +92,12 @@ function App() {
       return;
     }
     const profile = data || {};
-    setUser({ id: authUser.id, name: profile.name || authUser.user_metadata?.name || 'Participante', email: profile.email || authUser.email, role: profile.role || 'user' });
-    setScores(profile.scores || {});
-    setRewards(profile.rewards || {});
-    setScreen('modules');
+    const restoredUser = { id: authUser.id, name: profile.name || authUser.user_metadata?.name || 'Participante', email: profile.email || authUser.email, role: profile.role || 'user' };
+    setUser(restoredUser);
+    const cleanRewards = Object.fromEntries(Object.entries(profile.rewards || {}).map(([moduleId, activities]) => [moduleId, [...new Set(activities || [])]]));
+    setScores(Object.fromEntries(Object.entries(cleanRewards).map(([moduleId, activities]) => [moduleId, Math.min(activities.length * 20, MODULE_MAX_SCORE)])));
+    setRewards(cleanRewards);
+    restoreNavigation(restoredUser.id, setScreen, setSelectedModule, setCourseStep);
     setAuthReady(true);
     if (new URLSearchParams(window.location.search).has('code')) {
       setConfirmationNotice('Tu correo fue confirmado satisfactoriamente. Ya podés comenzar tu recorrido.');
@@ -101,7 +111,7 @@ function App() {
       const progress = readProgress(user);
       setScores(progress.scores || {});
       setRewards(progress.rewards || {});
-      setScreen('modules');
+      restoreNavigation(user.id, setScreen, setSelectedModule, setCourseStep);
       return;
     }
 
@@ -120,8 +130,7 @@ function App() {
         setAuthReady(true);
         return;
       }
-      if (session?.user) loadCloudUser(session.user);
-      else { setUser(null); setScreen('auth'); setAuthReady(true); }
+      if (event === 'SIGNED_OUT' || !session) { setUser(null); setScreen('auth'); setAuthReady(true); }
     });
     return () => { active = false; subscription.unsubscribe(); };
   }, []);
@@ -129,6 +138,14 @@ function App() {
   useEffect(() => {
     if (!isSupabaseConfigured && user?.id) localStorage.setItem(progressStorageKey(user.id), JSON.stringify({ scores, rewards }));
   }, [user?.id, scores, rewards]);
+
+  useEffect(() => {
+    if (!user?.id || screen === 'auth') return;
+    const navigation = screen === 'course' && selectedModule
+      ? { screen, moduleId: selectedModule.id, step: courseStep }
+      : { screen };
+    localStorage.setItem(navigationStorageKey(user.id), JSON.stringify(navigation));
+  }, [user?.id, screen, selectedModule?.id, courseStep]);
 
   async function authenticate(formData) {
     const email = formData.email.trim().toLowerCase();
@@ -187,6 +204,7 @@ function App() {
   async function logout() {
     if (isSupabaseConfigured) await supabase.auth.signOut();
     localStorage.removeItem(STORAGE_SESSION);
+    if (user?.id) localStorage.removeItem(navigationStorageKey(user.id));
     setUser(null);
     setScreen('auth');
     setNotice('Sesión cerrada correctamente.');
@@ -194,7 +212,19 @@ function App() {
 
   function openModule(module) {
     setSelectedModule(module);
+    setCourseStep(0);
+    if (user?.id) localStorage.setItem(navigationStorageKey(user.id), JSON.stringify({ screen: 'course', moduleId: module.id, step: 0 }));
     setScreen('course');
+  }
+
+  function rememberCourseStep(step) {
+    setCourseStep(step);
+    if (user?.id && selectedModule) localStorage.setItem(navigationStorageKey(user.id), JSON.stringify({ screen: 'course', moduleId: selectedModule.id, step }));
+  }
+
+  function returnToModules() {
+    if (user?.id) localStorage.setItem(navigationStorageKey(user.id), JSON.stringify({ screen: 'modules' }));
+    setScreen('modules');
   }
 
   function persistProgress(nextScores, nextRewards) {
@@ -206,21 +236,42 @@ function App() {
   }
 
   function finishModule(moduleId, score, activityRewards) {
-    const nextScores = { ...scores, [moduleId]: score };
-    const nextRewards = { ...rewards, [moduleId]: activityRewards };
+    const uniqueRewards = [...new Set(activityRewards)];
+    const nextScores = { ...scores, [moduleId]: Math.min(uniqueRewards.length * 20, MODULE_MAX_SCORE) };
+    const nextRewards = { ...rewards, [moduleId]: uniqueRewards };
     setScores(nextScores);
     setRewards(nextRewards);
     persistProgress(nextScores, nextRewards);
     setSelectedModule(null);
-    setScreen('modules');
+    setCourseStep(0);
+    returnToModules();
   }
 
   function saveModuleProgress(moduleId, activityRewards) {
-    const nextScores = { ...scores, [moduleId]: activityRewards.length * 20 };
-    const nextRewards = { ...rewards, [moduleId]: activityRewards };
+    const uniqueRewards = [...new Set(activityRewards)];
+    const nextScores = { ...scores, [moduleId]: Math.min(uniqueRewards.length * 20, MODULE_MAX_SCORE) };
+    const nextRewards = { ...rewards, [moduleId]: uniqueRewards };
     setScores(nextScores);
     setRewards(nextRewards);
     persistProgress(nextScores, nextRewards);
+  }
+
+  async function openStatistics() {
+    setScreen('stats');
+    if (!isAdmin) return;
+    if (!isSupabaseConfigured) {
+      setTeamProfiles(getUsers().filter((profile) => profile.role !== 'admin').map((profile) => ({ ...profile, ...readProgress(profile) })));
+      return;
+    }
+    setTeamStatsLoading(true);
+    setTeamStatsError('');
+    const { data, error } = await supabase.from('profiles').select('id, name, email, role, scores, rewards, updated_at').neq('role', 'admin').order('name');
+    setTeamStatsLoading(false);
+    if (error) {
+      setTeamStatsError('No pudimos cargar las estadísticas del equipo. Verificá la política de administrador en Supabase.');
+      return;
+    }
+    setTeamProfiles(data || []);
   }
 
   async function updatePassword(formData) {
@@ -245,12 +296,13 @@ function App() {
 
   return (
     <main className="cq-app-shell">
-      <Header user={user} totalScore={totalScore} approved={approvedModules.length} onHome={() => setScreen('modules')} onModules={() => setScreen('modules')} onLogout={logout} />
+      <Header totalScore={totalScore} onHome={returnToModules} onModules={returnToModules} onStats={openStatistics} onLogout={logout} />
       <AnimatePresence>{confirmationNotice && <EmailConfirmedNotice key="confirmed-email" message={confirmationNotice} onClose={() => setConfirmationNotice('')} />}</AnimatePresence>
       <AnimatePresence mode="wait">
         {screen === 'welcome' && <Welcome key="welcome" user={user} onStart={() => setScreen('modules')} />}
         {screen === 'modules' && <MissionBoard key="modules" approved={approvedModules} scores={scores} isAdmin={isAdmin} totalScore={totalScore} finalUnlocked={finalUnlocked} onOpen={openModule} onFinal={() => setScreen('final')} onGame={(game) => setScreen(game)} />}
-        {screen === 'course' && selectedModule && <CourseFlow key={selectedModule.id} module={selectedModule} isAdmin={isAdmin} initialRewards={rewards[selectedModule.id] || []} onProgress={saveModuleProgress} onClose={() => setScreen('modules')} onFinish={finishModule} />}
+        {screen === 'course' && selectedModule && <CourseFlow key={selectedModule.id} module={selectedModule} isAdmin={isAdmin} initialRewards={rewards[selectedModule.id] || []} initialStep={courseStep} onStepChange={rememberCourseStep} onProgress={saveModuleProgress} onClose={returnToModules} onFinish={finishModule} />}
+        {screen === 'stats' && <StatisticsPage key="stats" scores={scores} isAdmin={isAdmin} teamProfiles={teamProfiles} loading={teamStatsLoading} error={teamStatsError} onRefresh={openStatistics} onClose={() => setScreen('modules')} />}
         {screen === 'final' && <FinalChallenge key="final" onClose={() => setScreen('modules')} />}
         {screen === 'hangman' && <HangmanGame key="hangman" onClose={() => setScreen('modules')} />}
         {screen === 'signals' && <SignalsGame key="signals" onClose={() => setScreen('modules')} />}
@@ -292,6 +344,29 @@ function AuthScreen({ mode, notice, onModeChange, onSubmit }) {
   );
 }
 
+function readNavigation(userId) {
+  if (!userId) return null;
+  try { return JSON.parse(localStorage.getItem(navigationStorageKey(userId)) || 'null'); } catch { return null; }
+}
+
+function restoreNavigation(userId, setScreen, setSelectedModule, setCourseStep) {
+  const saved = readNavigation(userId);
+  if (saved?.screen === 'course') {
+    const module = courseModules.find((item) => item.id === saved.moduleId);
+    if (module) {
+      setSelectedModule(module);
+      setCourseStep(Math.max(0, Math.min(6, Number(saved.step) || 0)));
+      setScreen('course');
+      return;
+    }
+  }
+  if (['hangman', 'signals', 'stats', 'final'].includes(saved?.screen)) {
+    setScreen(saved.screen);
+    return;
+  }
+  setScreen('modules');
+}
+
 function PasswordRecoveryScreen({ notice, onSubmit }) {
   function handleSubmit(event) { event.preventDefault(); onSubmit(Object.fromEntries(new FormData(event.currentTarget))); }
   const noticeTone = /^(Las contraseñas no coinciden|La contraseña debe|El enlace venció)/.test(notice) ? 'is-error' : '';
@@ -300,16 +375,39 @@ function PasswordRecoveryScreen({ notice, onSubmit }) {
 
 function PointsBadge({ value }) { return <span className="cq-points-badge">🛡️ {value} pts</span>; }
 
-function Header({ user, totalScore, approved, onHome, onModules, onLogout }) {
-  const progress = Math.round((approved / courseModules.length) * 100);
-  return <header className="cq-header"><button className="cq-brand-button" onClick={onHome} aria-label="Ir a mis misiones"><Brand /></button><div className="cq-header-actions"><button className="cq-progress" onClick={onModules}><span>Tu avance</span><i><b style={{ width: `${progress}%` }} /></i><strong>{progress}%</strong></button><PointsBadge value={totalScore} /><button className="cq-logout" onClick={onLogout}>↪ Cerrar sesión</button></div></header>;
+function Header({ totalScore, onHome, onModules, onStats, onLogout }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  return <header className="cq-header"><button className="cq-brand-button" onClick={onHome} aria-label="Ir a mis misiones"><Brand /></button><div className="cq-header-actions"><PointsBadge value={totalScore} /><div className="cq-header-menu"><button className="cq-menu-toggle" onClick={() => setMenuOpen((open) => !open)} aria-expanded={menuOpen} aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}><i /><i /><i /></button>{menuOpen && <motion.div className="cq-account-menu" initial={{ opacity: 0, y: -8, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: .96 }}><button onClick={() => { setMenuOpen(false); onModules(); }}><span>🧭 Misiones</span><b>→</b></button><button onClick={() => { setMenuOpen(false); onStats(); }}><span>📊 Estadísticas</span><b>→</b></button><button className="cq-account-logout" onClick={onLogout}><span>↪</span>Cerrar sesión</button></motion.div>}</div></div></header>;
 }
 
 function Brand() { return <span className="cq-brand"><img className="cq-brand-logo" src={logoUrl} alt="" /><strong>Cyber<span>Quest</span></strong></span>; }
 
+function StatisticsPage({ scores, isAdmin, teamProfiles, loading, error, onRefresh, onClose }) {
+  const scoreFor = (scoreMap, moduleId) => Math.max(0, Math.min(MODULE_MAX_SCORE, Number(scoreMap?.[moduleId]) || 0));
+  const personalModules = courseModules.map((module) => ({ ...module, score: scoreFor(scores, module.id) }));
+  const personalTotal = personalModules.reduce((sum, module) => sum + module.score, 0);
+  const personalPercent = Math.round((personalTotal / (courseModules.length * MODULE_MAX_SCORE)) * 100);
+  const personalBest = [...personalModules].sort((a, b) => b.score - a.score)[0];
+  const personalNeed = [...personalModules].sort((a, b) => a.score - b.score)[0];
+  const employees = teamProfiles.filter((profile) => profile.role !== 'admin');
+  const teamModules = courseModules.map((module) => {
+    const total = employees.reduce((sum, profile) => sum + scoreFor(profile.scores, module.id), 0);
+    const completed = employees.filter((profile) => scoreFor(profile.scores, module.id) >= PASS_SCORE).length;
+    return { ...module, score: employees.length ? Math.round(total / employees.length) : 0, completed };
+  });
+  const teamPercent = employees.length ? Math.round(teamModules.reduce((sum, module) => sum + module.score, 0) / (courseModules.length * MODULE_MAX_SCORE) * 100) : 0;
+  const teamBest = employees.length ? [...teamModules].sort((a, b) => b.score - a.score)[0] : null;
+  const teamNeed = employees.length ? [...teamModules].sort((a, b) => a.score - b.score)[0] : null;
+  const visibleModules = isAdmin ? teamModules : personalModules;
+  const visiblePercent = isAdmin ? teamPercent : personalPercent;
+  const heading = isAdmin ? 'Panel de aprendizaje del equipo' : 'Mis estadísticas de aprendizaje';
+  const description = isAdmin ? 'Medí el avance de la empresa, identificá fortalezas y detectá en qué temas conviene reforzar la capacitación.' : 'Mirá tu avance por módulo e identificá qué temas ya dominás y cuáles conviene repasar.';
+  return <motion.section className="cq-stats-page" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}><div className="cq-stats-top"><button className="cq-back" onClick={onClose}>← Mis misiones</button>{isAdmin && <button className="cq-stats-refresh" onClick={onRefresh}>↻ Actualizar datos</button>}</div><header className="cq-stats-hero"><div><p className="cq-kicker">{isAdmin ? 'INTELIGENCIA DE CAPACITACIÓN' : 'SEGUIMIENTO PERSONAL'}</p><h1>{heading}</h1><p>{description}</p></div><div className="cq-progress-ring" style={{ '--progress': `${visiblePercent * 3.6}deg` }}><div><b>{visiblePercent}%</b><span>avance</span></div></div></header>{isAdmin && <div className="cq-team-kpis"><article><span>👥</span><div><b>{employees.length}</b><small>empleados con progreso</small></div></article><article><span>🏆</span><div><b>{teamBest?.title || '—'}</b><small>fortaleza del equipo</small></div></article><article><span>🎯</span><div><b>{teamNeed?.title || '—'}</b><small>tema a reforzar</small></div></article></div>}{loading ? <div className="cq-stats-loading">Actualizando estadísticas del equipo…</div> : error ? <div className="cq-stats-error"><b>No se pudo consultar el equipo.</b><span>{error}</span></div> : <><section className="cq-stats-card"><div className="cq-stats-card-heading"><div><p className="cq-kicker">COMPARATIVA POR MÓDULO</p><h2>{isAdmin ? 'Promedio de dominio del equipo' : 'Tu dominio por módulo'}</h2></div><span>Meta: {PASS_SCORE} / {MODULE_MAX_SCORE} pts</span></div><div className="cq-bar-chart">{visibleModules.map((module) => <div className="cq-bar-row" key={module.id}><div className="cq-bar-label"><span>{module.icon}</span><b>{module.title}</b><em>{module.score} pts</em></div><div className="cq-bar-track"><i className={module.score >= PASS_SCORE ? 'is-passing' : ''} style={{ width: `${Math.max(2, module.score / MODULE_MAX_SCORE * 100)}%` }} /></div>{isAdmin && <small>{module.completed}/{employees.length} aprobó</small>}</div>)}</div></section><section className="cq-stats-insights"><article className="cq-insight-good"><span>✦</span><div><p>{isAdmin ? 'FORTALEZA DE LA EMPRESA' : 'TU MAYOR FORTALEZA'}</p><h3>{(isAdmin ? teamBest : personalBest)?.title || 'Todavía no hay datos'}</h3><small>{isAdmin && !employees.length ? 'Cuando el equipo complete actividades, esta vista mostrará la fortaleza principal.' : isAdmin ? `Promedio: ${teamBest?.score || 0} de ${MODULE_MAX_SCORE} puntos.` : `${personalBest?.score || 0} de ${MODULE_MAX_SCORE} puntos.`}</small></div></article><article className="cq-insight-focus"><span>◎</span><div><p>{isAdmin ? 'OPORTUNIDAD DE MEJORA' : 'PRÓXIMO TEMA A REPASAR'}</p><h3>{(isAdmin ? teamNeed : personalNeed)?.title || 'Todavía no hay datos'}</h3><small>{isAdmin && !employees.length ? 'Cuando existan resultados, este indicador señalará el tema prioritario.' : isAdmin ? `Promedio: ${teamNeed?.score || 0} de ${MODULE_MAX_SCORE} puntos. Una campaña de refuerzo puede mejorar este resultado.` : `${personalNeed?.score || 0} de ${MODULE_MAX_SCORE} puntos. Volvé al módulo para practicarlo.`}</small></div></article></section>{isAdmin && <section className="cq-stats-card cq-employee-card"><div className="cq-stats-card-heading"><div><p className="cq-kicker">VISTA DE PERSONAS</p><h2>Progreso por empleado</h2></div><span>{employees.length} registros</span></div>{employees.length ? <div className="cq-employee-list">{employees.map((profile) => { const total = courseModules.reduce((sum, module) => sum + scoreFor(profile.scores, module.id), 0); const approved = courseModules.filter((module) => scoreFor(profile.scores, module.id) >= PASS_SCORE).length; return <article key={profile.id || profile.email}><div className="cq-employee-avatar">{(profile.name || profile.email || '?').slice(0, 1).toUpperCase()}</div><div><b>{profile.name || 'Sin nombre'}</b><small>{profile.email}</small></div><div className="cq-employee-progress"><b>{total} / 1200 pts</b><span>{approved} de {courseModules.length} módulos aprobados</span></div></article>; })}</div> : <p className="cq-empty-team">Los empleados que se registren y avancen en CyberQuest aparecerán acá con su progreso.</p>}</section>}</>}</motion.section>;
+}
+
 function Welcome({ user, onStart }) {
   return <motion.section className="cq-welcome" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><FloatingParticles />
-    <div className="cq-welcome-copy"><p className="cq-greeting">¡Bienvenido, {user.name}!</p><p className="cq-kicker">ACADEMIA DIGITAL · EMPRESAS SEGURAS</p><h1>La seguridad se construye en cada decisión.</h1><p className="cq-lead">CyberQuest es una plataforma de capacitación interactiva para reconocer riesgos, proteger información sensible y actuar con seguridad en el trabajo y en la vida diaria.</p><p className="cq-summary"><b>Tu recorrido incluye 6 módulos:</b> contraseñas, correo personal / corporativo, protección de datos, amenazas cibernéticas, ingeniería social y grooming. En cada uno vas a encontrar contenido guiado, mini desafíos, situaciones reales y trivias.</p><button className="cq-primary" onClick={onStart}>Comenzar desafío <span>→</span></button></div>
+    <div className="cq-welcome-copy"><p className="cq-greeting">¡Bienvenido, {user.name}!</p><p className="cq-kicker">ACADEMIA DIGITAL · EMPRESAS SEGURAS</p><h1>La seguridad se construye en cada decisión.</h1><p className="cq-lead">CyberQuest es una plataforma de capacitación interactiva para reconocer riesgos, proteger información sensible y actuar con seguridad en el trabajo y en la vida diaria.</p><p className="cq-summary"><b>Tu recorrido incluye 6 módulos:</b> contraseñas, email seguro, protección de datos, amenazas cibernéticas, ingeniería social y grooming. En cada uno vas a encontrar contenido guiado, mini desafíos, situaciones reales y trivias.</p><button className="cq-primary" onClick={onStart}>Comenzar desafío <span>→</span></button></div>
     <IntroCarousel />
   </motion.section>;
 }
@@ -342,13 +440,13 @@ function HangmanLoopIcon() {
   return <svg className="cq-hangman-loop" viewBox="0 0 64 64" aria-hidden="true"><path d="M10 55h44M20 55V10h25M45 10v10" /><motion.g animate={{ rotate: [-3, 3, -3] }} transition={{ duration: 1.7, repeat: Infinity, ease: 'easeInOut' }} style={{ transformOrigin: '45px 24px' }}><circle cx="45" cy="27" r="6" /><path d="M45 33v13m0-9-7 6m7-6 7 6m-7 3-6 7m6-7 6 7" /></motion.g></svg>;
 }
 
-function CourseFlow({ module, isAdmin, initialRewards, onProgress, onClose, onFinish }) {
-  const [step, setStep] = useState(0);
+function CourseFlow({ module, isAdmin, initialRewards, initialStep, onStepChange, onProgress, onClose, onFinish }) {
+  const [step, setStep] = useState(() => Math.max(0, Math.min(6, initialStep || 0)));
   const [rewardedActivities, setRewardedActivities] = useState(() => new Set(initialRewards));
-  const [score, setScore] = useState(() => initialRewards.length * 20);
-  const [highestStep, setHighestStep] = useState(0);
+  const [score, setScore] = useState(() => Math.min(new Set(initialRewards).size * 20, MODULE_MAX_SCORE));
+  const [highestStep, setHighestStep] = useState(() => Math.max(0, Math.min(6, initialStep || 0)));
   const labels = ['1. Aprendé', '2. Decidí', '3. Aprendé', '4. Decidí', '5. Trivia', '6. Aprendé', '7. Trivia'];
-  const advance = (next) => { setHighestStep((current) => Math.max(current, next)); setStep(next); };
+  const moveToStep = (next) => { setHighestStep((current) => Math.max(current, next)); setStep(next); onStepChange(next); };
   const addPoint = (activityId) => {
     if (rewardedActivities.has(activityId)) return;
     const nextRewards = new Set([...rewardedActivities, activityId]);
@@ -356,14 +454,14 @@ function CourseFlow({ module, isAdmin, initialRewards, onProgress, onClose, onFi
     setScore(nextRewards.size * 20);
     onProgress(module.id, [...nextRewards]);
   };
-  const current = step === 0 ? <LearnBlock module={module} phase={0} onCorrect={() => addPoint('learn-0')} onNext={() => advance(1)} />
-    : step === 1 ? <ScenarioBlock module={module} scenario={module.scenarios[0]} onCorrect={() => addPoint('scenario-0')} onNext={() => advance(2)} />
-      : step === 2 ? <LearnBlock module={module} phase={1} onCorrect={() => addPoint('learn-1')} onNext={() => advance(3)} />
-        : step === 3 ? <ScenarioBlock module={module} scenario={module.scenarios[1]} onCorrect={() => addPoint('scenario-1')} onNext={() => advance(4)} />
-          : step === 4 ? <QuizBlock questions={module.quizzes.slice(0, 3)} title="Trivia" activityPrefix="quiz" onCorrect={(questionIndex) => addPoint(`quiz-${questionIndex}`)} onNext={() => advance(5)} />
-            : step === 5 ? <LearnBlock module={module} phase={2} onCorrect={() => addPoint('learn-2')} onNext={() => advance(6)} />
+  const current = step === 0 ? <LearnBlock module={module} phase={0} onCorrect={() => addPoint('learn-0')} onNext={() => moveToStep(1)} />
+    : step === 1 ? <ScenarioBlock module={module} scenario={module.scenarios[0]} onCorrect={() => addPoint('scenario-0')} onNext={() => moveToStep(2)} />
+      : step === 2 ? <LearnBlock module={module} phase={1} onCorrect={() => addPoint('learn-1')} onNext={() => moveToStep(3)} />
+        : step === 3 ? <ScenarioBlock module={module} scenario={module.scenarios[1]} onCorrect={() => addPoint('scenario-1')} onNext={() => moveToStep(4)} />
+          : step === 4 ? <QuizBlock questions={module.quizzes.slice(0, 3)} title="Trivia" activityPrefix="quiz" onCorrect={(questionIndex) => addPoint(`quiz-${questionIndex}`)} onNext={() => moveToStep(5)} />
+            : step === 5 ? <LearnBlock module={module} phase={2} onCorrect={() => addPoint('learn-2')} onNext={() => moveToStep(6)} />
               : <QuizBlock questions={module.quizzes.slice(3)} title="Trivia final" activityPrefix="final-quiz" onCorrect={(questionIndex) => addPoint(`final-quiz-${questionIndex}`)} onNext={() => onFinish(module.id, score, [...rewardedActivities])} />;
-  return <motion.section className="cq-course" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}><button className="cq-back" onClick={onClose}>← Mis misiones</button><header className="cq-course-header"><span>{module.icon}</span><div><h1>{module.title}</h1><p>{module.subtitle}</p></div><b><PointsBadge value={`${score} / ${MODULE_MAX_SCORE}`} /></b></header><nav className="cq-stepper">{labels.map((label, index) => <button key={label} className={index === step ? 'active' : ''} disabled={!isAdmin && index > highestStep} onClick={() => setStep(index)}>{label}</button>)}</nav><AnimatePresence mode="wait"><motion.div key={step} initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -18 }}>{current}</motion.div></AnimatePresence></motion.section>;
+  return <motion.section className="cq-course" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}><button className="cq-back" onClick={onClose}>← Misiones</button><header className="cq-course-header"><span>{module.icon}</span><div><h1>{module.title}</h1><p>{module.subtitle}</p></div><b><PointsBadge value={`${score} / ${MODULE_MAX_SCORE}`} /></b></header><nav className="cq-stepper">{labels.map((label, index) => <button key={label} className={index === step ? 'active' : ''} disabled={!isAdmin && index > highestStep} onClick={() => moveToStep(index)}>{label}</button>)}</nav><AnimatePresence mode="wait"><motion.div key={step} initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -18 }}>{current}</motion.div></AnimatePresence></motion.section>;
 }
 
 function LearnBlock({ module, phase, onCorrect, onNext }) {
@@ -371,7 +469,8 @@ function LearnBlock({ module, phase, onCorrect, onNext }) {
   const mini = module.minis[phase];
   const details = phase === 0 ? [module.learn.details[0]] : phase === 1 ? [module.learn.details[1]] : module.learn.details.slice(2);
   const pointGroups = [[0], [1, 2], [3]];
-  return <article className="cq-activity"><p className="cq-kicker">CONTENIDO EDUCATIVO · BLOQUE {phase + 1} DE 3</p><h2>{phase === 0 ? module.learn.title : phase === 1 ? 'Profundizá el concepto' : 'Llevá el conocimiento a la práctica'}</h2>{phase === 0 && <p className="cq-activity-lead">{module.learn.intro}</p>}{details.map((detail) => <p className="cq-detail" key={detail}>{detail}</p>)}<div className="cq-learning-points">{pointGroups[phase].map((index) => module.learn.points[index]).filter(Boolean).map(([title, text]) => <div key={title}><b>{title}</b><span>{text}</span></div>)}</div><QuestionCard eyebrow={<>MINI DESAFÍO <PointsBadge value={20} /></>} item={mini} onCorrect={onCorrect} onAnswered={() => setAnswered(true)} />{answered && <button className="cq-primary" onClick={onNext}>{phase === 0 ? 'Ir a la situación →' : phase === 1 ? 'Ver la próxima situación →' : 'Ir a la trivia final →'}</button>}</article>;
+  const title = module.learn.phaseTitles?.[phase] || (phase === 0 ? module.learn.title : phase === 1 ? 'Profundizá el concepto' : 'Llevá el conocimiento a la práctica');
+  return <article className="cq-activity"><p className="cq-kicker">CONTENIDO EDUCATIVO · BLOQUE {phase + 1} DE 3</p><h2>{title}</h2>{phase === 0 && <p className="cq-activity-lead">{module.learn.intro}</p>}{details.map((detail) => <p className="cq-detail" key={detail}>{detail}</p>)}<div className="cq-learning-points">{pointGroups[phase].map((index) => module.learn.points[index]).filter(Boolean).map(([title, text]) => <div key={title}><b>{title}</b><span>{text}</span></div>)}</div><QuestionCard eyebrow={<>MINI DESAFÍO <PointsBadge value={20} /></>} item={mini} onCorrect={onCorrect} onAnswered={() => setAnswered(true)} />{answered && <button className="cq-primary" onClick={onNext}>{phase === 0 ? 'Ir a la situación →' : phase === 1 ? 'Ver la próxima situación →' : 'Ir a la trivia final →'}</button>}</article>;
 }
 
 function ScenarioBlock({ scenario, onCorrect, onNext }) {
