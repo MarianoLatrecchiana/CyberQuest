@@ -20,19 +20,22 @@ const courseStateStorageKey = (userId) => `cq_react_course_state_${userId}`;
 const hangmanConcepts = [
   { word: 'RANSOMWARE', definition: 'Tipo de software malicioso que bloquea o cifra información y exige un pago para recuperarla.' },
   { word: 'PHISHING', definition: 'Engaño que busca obtener credenciales o datos mediante mensajes, sitios o enlaces falsos.' },
-  { word: 'MALWARE', definition: 'Término general para programas diseñados para dañar, alterar o acceder sin autorización a un equipo.' }
+  { word: 'MALWARE', definition: 'Término general para programas diseñados para dañar, alterar o acceder sin autorización a un equipo.' },
+  { word: 'FIREWALL', definition: 'Barrera de seguridad que controla qué conexiones pueden entrar o salir de una red.' },
+  { word: 'SPYWARE', definition: 'Programa malicioso que espía la actividad de una persona sin su permiso.' },
+  { word: 'CONTRASEÑA', definition: 'Clave secreta que protege el acceso a una cuenta, aplicación o dispositivo.' }
 ];
 let nextHangmanConceptIndex = 0;
 
 const signalChallenges = [
-  { title: 'Mensaje que apura', text: 'Te llega un WhatsApp que parece ser de una empresa conocida: “Tu paquete está retenido. Pagá ahora desde este enlace”.', answer: 'Frenar y verificar por la web o app oficial, sin abrir el enlace.', signals: ['Te apura a actuar', 'Tiene un enlace', 'Pide un pago inesperado'] },
-  { title: 'Aprobación inesperada', text: 'Tu celular muestra una solicitud para aprobar el acceso a tu cuenta, pero vos no estabas iniciando sesión.', answer: 'Rechazarla y cambiar o revisar la cuenta por un canal conocido.', signals: ['No iniciaste sesión', 'Alguien podría tener tu clave', 'El código no se comparte'] },
-  { title: 'Pendrive encontrado', text: 'Encontrás un pendrive en la entrada de tu trabajo o edificio, con una etiqueta que dice “Fotos”.', answer: 'No conectarlo; entregarlo o reportarlo para que se revise de forma segura.', thirdOption: 'Dárselo a un compañero de trabajo para que lo revise.', signals: ['El dueño es desconocido', 'Puede contener archivos peligrosos', 'La curiosidad no es un control de seguridad'] }
+  { title: 'Mensaje inesperado', text: 'Un número que no tenés agendado te escribe por WhatsApp y dice: “Tu paquete está retenido. Pagá ahora para evitar que sea devuelto”.', answer: 'Frenar y verificar por la web, app o correo oficial de la empresa, sin abrir el enlace.', signals: ['Genera urgencia para actuar', 'Incluye un enlace sospechoso', 'El remitente es desconocido'] },
+  { title: 'Inicio de sesión no reconocido', text: 'Tu celular muestra un aviso de inicio de sesión desde un dispositivo nuevo, pero vos no estabas ingresando a tu cuenta.', answer: 'Marcar “No fui yo” y revisar las sesiones y contraseña desde la app oficial.', wrongOptions: ['Marcar “Fui yo” para sacar la notificación.', 'Ignorar el aviso y revisar la cuenta más tarde.'], signals: ['Detectás un dispositivo nuevo', 'No reconocés ese inicio de sesión', 'La alerta te pide confirmar la actividad'] },
+  { title: 'Pendrive encontrado', text: 'Encontrás un pendrive en la entrada de tu trabajo o edificio, con una etiqueta que dice “Fotos”.', answer: 'No conectarlo; entregarlo o reportarlo para que se revise de forma segura.', thirdOption: 'Dárselo a un compañero de trabajo para que lo revise.', signals: ['No sabés quién lo dejó', 'Podría contener archivos maliciosos', 'La curiosidad no es un control de seguridad'] }
 ];
 
 const signalOptionOrders = {
-  'Mensaje que apura': [1, 0, 2],
-  'Aprobación inesperada': [0, 2, 1],
+  'Mensaje inesperado': [1, 0, 2],
+  'Inicio de sesión no reconocido': [0, 2, 1],
   'Pendrive encontrado': [2, 1, 0]
 };
 
@@ -633,12 +636,17 @@ function CourseFlow({ module, isAdmin, initialRewards, initialStep, initialHighe
   const [score, setScore] = useState(() => Math.min(new Set(initialRewards).size * 20, MODULE_MAX_SCORE));
   const [highestStep, setHighestStep] = useState(() => Math.max(0, Math.min(6, initialHighestStep ?? initialStep ?? 0)));
   const [answers, setAnswers] = useState(() => initialAnswers || {});
+  const scenarioIndexes = useMemo(() => {
+    const total = module.scenarios.length;
+    const first = (attempt - 1) % total;
+    return [first, (first + 1) % total];
+  }, [module, attempt]);
   const rotatingChallenges = useMemo(() => rotateItems([
-    { kind: 'scenario', scenarioIndex: 0, label: 'Decidí' },
-    { kind: 'scenario', scenarioIndex: 1, label: 'Decidí' },
+    { kind: 'scenario', scenarioIndex: scenarioIndexes[0], label: 'Decidí' },
+    { kind: 'scenario', scenarioIndex: scenarioIndexes[1], label: 'Decidí' },
     { kind: 'quiz', questions: module.quizzes.slice(0, 3), prefix: 'quiz', title: 'Trivia', label: 'Trivia' },
     { kind: 'quiz', questions: module.quizzes.slice(3), prefix: 'final-quiz', title: 'Trivia final', label: 'Trivia' }
-  ], attempt - 1), [module, attempt]);
+  ], attempt - 1), [module, attempt, scenarioIndexes]);
   const flow = [{ kind: 'learn', phase: 0, label: 'Aprendé' }, rotatingChallenges[0], { kind: 'learn', phase: 1, label: 'Aprendé' }, rotatingChallenges[1], rotatingChallenges[2], { kind: 'learn', phase: 2, label: 'Aprendé' }, rotatingChallenges[3]];
   const moveToStep = (next) => { const nextHighest = Math.max(highestStep, next); setHighestStep(nextHighest); setStep(next); onStepChange(next, nextHighest); };
   const rememberAnswer = (activityId, answer) => {
@@ -677,6 +685,8 @@ function ScenarioBlock({ scenario, attempt, variation, savedAnswer, onAnswered, 
   const isChat = Boolean(scenario.person && chatMatch);
   const context = chatMatch?.[1] || '';
   const message = chatMatch?.[2] || scenario.text;
+  const isEmail = scenario.scene === 'email';
+  const isMeeting = scenario.scene === 'meeting';
   const [messageVisible, setMessageVisible] = useState(!isChat);
   useEffect(() => {
     setMessageVisible(!isChat);
@@ -686,7 +696,7 @@ function ScenarioBlock({ scenario, attempt, variation, savedAnswer, onAnswered, 
   }, [scenario, isChat]);
   const picture = scenario.visual?.includes('/') ? <img src={scenario.visual} alt={scenario.person || 'Persona de la situación'} /> : <span className={`cq-scenario-emoji ${scenario.visual === '☎️' ? 'is-phone' : ''}`}>{scenario.visual}</span>;
   const avatarClass = `cq-person-avatar ${scenario.visual?.includes('/') ? '' : 'has-emoji'}`;
-  const chat = isChat ? <><p className="cq-chat-context">{context}:</p><section className="cq-chat-window"><header><div className={avatarClass}>{picture}</div><div><b>{scenario.person.split(' · ')[0]}</b><small>● En línea</small></div><span>•••</span></header><div className="cq-chat-thread"><time>Ahora</time>{messageVisible ? <motion.p className="cq-chat-message" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>{message}<small>✓✓</small></motion.p> : <div className="cq-typing"><i /><i /><i /></div>}</div></section></> : <section className={`cq-dialogue-scene ${scenario.note ? 'has-note' : ''}`}><div className={avatarClass}>{picture}</div><div className="cq-chat-content"><span>{scenario.person || 'Situación para analizar'}</span><p>{scenario.text}</p>{scenario.note && <motion.div className="cq-password-note" initial={{ opacity: 0, rotate: -7, y: 10 }} animate={{ opacity: 1, rotate: -3, y: 0 }}><small>NOTA ENCONTRADA</small><b>{scenario.note}</b></motion.div>}</div></section>;
+  const chat = isChat ? <><p className="cq-chat-context">{context}:</p><section className="cq-chat-window"><header><div className={avatarClass}>{picture}</div><div><b>{scenario.person.split(' · ')[0]}</b><small>● En línea</small></div><span>•••</span></header><div className="cq-chat-thread"><time>Ahora</time>{messageVisible ? <motion.p className="cq-chat-message" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>{message}<small>✓✓</small></motion.p> : <div className="cq-typing"><i /><i /><i /></div>}</div></section></> : isEmail ? <section className="cq-email-preview"><header><span>✉️</span><div><b>{scenario.email.senderName}</b><small>{scenario.email.sender}</small></div><i>•••</i></header><div className="cq-email-body"><small>PARA VOS · AHORA</small><h3>{scenario.email.subject}</h3><p>{scenario.email.message}</p>{scenario.email.attachment && <span className="cq-email-attachment">📎 {scenario.email.attachment}</span>}</div></section> : isMeeting ? <section className="cq-meeting-scene"><div className="cq-meeting-people">{scenario.people.map((person, index) => <div className="cq-meeting-person" key={person}><img src={person} alt={index === 0 ? 'Integrante del equipo' : 'Persona que solicita acceso'} /></div>)}<span>↔</span></div><div><b>{scenario.person}</b><p>{scenario.text}</p></div></section> : <section className={`cq-dialogue-scene ${scenario.note ? 'has-note' : ''}`}><div className={avatarClass}>{picture}</div><div className="cq-chat-content"><span>{scenario.person || 'Situación para analizar'}</span><p>{scenario.text}</p>{scenario.note && <motion.div className="cq-password-note" initial={{ opacity: 0, rotate: -7, y: 10 }} animate={{ opacity: 1, rotate: -3, y: 0 }}><small>NOTA ENCONTRADA</small><b>{scenario.note}</b></motion.div>}</div></section>;
   return <article className="cq-activity"><p className="cq-kicker">SITUACIÓN COTIDIANA <PointsBadge value={20} /></p><h2>{scenario.title}</h2>{chat}{messageVisible && <QuestionCard item={{ prompt: '¿Qué harías en este caso?', options: scenario.options, answer: scenario.answer, feedback: scenario.feedback }} attempt={attempt} variation={variation} savedAnswer={savedAnswer} onCorrect={onCorrect} onAnswered={(answer) => { onAnswered(answer); setAnswered(true); }} />}{answered && <button className="cq-primary" onClick={onNext}>Continuar →</button>}</article>;
 }
 
@@ -717,13 +727,14 @@ function HangmanGame({ onClose }) {
   const concept = hangmanConcepts[conceptIndex];
   const [guessed, setGuessed] = useState([]);
   const [errors, setErrors] = useState(0);
-  const letters = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ'.split('');
+  const keyboardRows = ['QWERTYUIOP', 'ASDFGHJKLÑ', 'ZXCVBNM'];
+  const letters = keyboardRows.join('').split('');
   const complete = concept.word.split('').every((letter) => guessed.includes(letter));
   const lost = errors >= 5;
   const finished = complete || lost;
   const reveal = (letter) => {
     const normalized = String(letter || '').toUpperCase();
-    if (finished || !letters.includes(normalized) || guessed.includes(normalized)) return;
+    if (finished || !keyboardRows.join('').includes(normalized) || guessed.includes(normalized)) return;
     setGuessed((current) => [...current, normalized]);
     if (!concept.word.includes(normalized)) setErrors((current) => current + 1);
   };
@@ -749,10 +760,11 @@ function SignalsGame({ onClose }) {
   const [round, setRound] = useState(1);
   const challenges = useMemo(() => rotateItems(signalChallenges, round - 1), [round]);
   const item = challenges[index];
-  const isWhatsAppChallenge = item.title === 'Mensaje que apura';
-  const isApprovalChallenge = item.title === 'Aprobación inesperada';
+  const isWhatsAppChallenge = item.title === 'Mensaje inesperado';
+  const isApprovalChallenge = item.title === 'Inicio de sesión no reconocido';
   const isPendriveChallenge = item.title === 'Pendrive encontrado';
-  const baseOptions = [{ text: item.answer, isCorrect: true }, { text: 'Abrirlo o conectarlo para comprobar si realmente hay un problema.', isCorrect: false }, { text: item.thirdOption || 'Esperar, porque si fuera importante alguien volverá a escribir.', isCorrect: false }];
+  const defaultWrongOptions = ['Abrirlo o conectarlo para comprobar si realmente hay un problema.', item.thirdOption || 'Esperar, porque si fuera importante alguien volverá a escribir.'];
+  const baseOptions = [{ text: item.answer, isCorrect: true }, ...(item.wrongOptions || defaultWrongOptions).map((text) => ({ text, isCorrect: false }))];
   const reorderedOptions = reorderQuestion({ options: baseOptions.map((option) => option.text), answer: 0 }, round, index);
   const options = reorderedOptions.options.map((text, optionIndex) => ({ text, isCorrect: optionIndex === reorderedOptions.answer }));
   const correct = answer !== null && options[answer]?.isCorrect;
@@ -763,9 +775,9 @@ function SignalsGame({ onClose }) {
     return () => window.clearTimeout(timer);
   }, [index, isWhatsAppChallenge]);
   const situation = isWhatsAppChallenge
-    ? <section className="cq-whatsapp-chat"><header><span>📦</span><div><b>Envíos Express</b><small>en línea</small></div><i>•••</i></header><div className="cq-whatsapp-thread"><time>Ahora</time>{messageVisible ? <><motion.p className="cq-whatsapp-message" initial={{ opacity: 0, y: 9 }} animate={{ opacity: 1, y: 0 }}>Tu paquete está retenido. Para liberarlo, seguí este enlace.<small>✓✓</small></motion.p><motion.p className="cq-whatsapp-message cq-whatsapp-link" initial={{ opacity: 0, y: 9 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .45 }}>🔗 envios-express-seguimiento.example/activar<small>✓✓</small></motion.p></> : <div className="cq-whatsapp-typing"><i /><i /><i /></div>}</div></section>
+    ? <section className="cq-whatsapp-chat"><header><span>📦</span><div><b>Envíos Express</b><small>número no agendado</small></div><i>•••</i></header><div className="cq-whatsapp-thread"><time>Ahora</time>{messageVisible ? <><motion.p className="cq-whatsapp-message" initial={{ opacity: 0, y: 9 }} animate={{ opacity: 1, y: 0 }}>Tu paquete está retenido. Pagá ahora para evitar que sea devuelto.<small>✓✓</small></motion.p><motion.p className="cq-whatsapp-message cq-whatsapp-link" initial={{ opacity: 0, y: 9 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .45 }}>🔗 envios-express-seguimiento.example/activar<small>✓✓</small></motion.p></> : <div className="cq-whatsapp-typing"><i /><i /><i /></div>}</div></section>
     : isApprovalChallenge ? <section className="cq-phone-scene"><motion.div className="cq-real-phone" initial={{ opacity: 0, y: 15, rotate: -2 }} animate={{ opacity: 1, y: 0, rotate: 0 }}><img src={`${import.meta.env.BASE_URL}security-notice-phone.png`} alt="Una persona sostiene un celular que muestra una alerta de seguridad" /><div className="cq-real-phone-notice"><div className="cq-real-phone-status"><span>9:41</span><b>● ● ●</b></div><header><span>🛡️</span><div><b>Aviso de seguridad</b><small>Ahora</small></div></header><div className="cq-real-phone-message"><motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .25 }}>Detectamos un inicio de sesión en tu cuenta desde un dispositivo nuevo.</motion.p><motion.div className="cq-approval-request" initial={{ opacity: 0, scale: .94 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: .55 }}><b>¿Reconocés esta actividad?</b><span>Si fuiste vos, desestimá este aviso. Si no fuiste vos, revisá la seguridad desde la app oficial.</span><div><button>No fui yo</button><button>Fui yo</button></div></motion.div></div></div></motion.div></section>
-    : isPendriveChallenge ? <motion.figure className="cq-pendrive-photo" initial={{ opacity: 0, scale: .985 }} animate={{ opacity: 1, scale: 1 }}><img src={`${import.meta.env.BASE_URL}found-pendrive-office.png`} alt="Una mujer alcanza un pendrive sin identificar en el piso de una oficina" /><figcaption>Un pendrive sin identificar aparece cerca de la entrada de la oficina.</figcaption></motion.figure>
+    : isPendriveChallenge ? <motion.figure className="cq-pendrive-photo" initial={{ opacity: 0, scale: .985 }} animate={{ opacity: 1, scale: 1 }}><img src={`${import.meta.env.BASE_URL}found-pendrive-office.png`} alt="Una mujer alcanza un pendrive sin identificar en el piso de una oficina" /><figcaption>Una empleada encuentra un pendrive sin identificar en el piso de la oficina.</figcaption></motion.figure>
     : <section className="cq-signal-situation"><span>💬</span><p>{item.text}</p></section>;
   const continueGame = () => {
     if (index === challenges.length - 1) setFinished(true);
