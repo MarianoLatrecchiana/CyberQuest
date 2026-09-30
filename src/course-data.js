@@ -43,7 +43,399 @@ export const courseModules = [
     quizzes: [q('¿Cuál es una señal de alerta?', ['Un contacto pide mantener la conversación en secreto.', 'Un familiar envía un saludo.', 'Una aplicación se actualiza.'], 0, 'El secreto y aislamiento son tácticas frecuentes.'), q('¿Qué conviene hacer ante un posible caso?', ['Guardar evidencia y pedir ayuda.', 'Responder con amenazas.', 'Publicar conversación en redes.'], 0, 'Es importante acompañar y usar canales seguros.'), q('¿Qué dato no debe compartirse con desconocidos?', ['Ubicación y rutina.', 'Color favorito.', 'Recomendación de música.'], 0, 'Pueden poner en riesgo la seguridad personal.'), q('¿Qué combinación es una señal relevante?', ['Secretos, fotos y otro chat privado.', 'Publicación pública de un compañero.', 'Actualización disponible.'], 0, 'Aislamiento y secretos son señales de manipulación.'), q('¿Qué corresponde ante una señal de riesgo?', ['Bloquear, conservar evidencia y pedir ayuda.', 'Continuar conversación.', 'Publicar el chat.'], 0, 'Bloquear y buscar apoyo es una respuesta segura.')] }
 ];
 
-export const finalQuestions = courseModules.flatMap(module => module.quizzes.slice(0, 2).map(item => ({ ...item, module: module.id }))).slice(0, 10);
+const classify = (prompt, context, answer, feedback) => ({ prompt, context, options: ['Confiable', 'Necesita verificación'], answer, feedback });
+const multi = (prompt, options, answers, feedback, context = '') => ({ kind: 'multi', prompt, options, answers, feedback, context });
+
+const socialQuizzes = [
+  classify('¿Cómo evaluarías esta llamada?', '“Hola, soy Laura del proveedor de internet. Tenemos una orden para revisar el router. ¿Podés confirmarme el modelo y el código de acceso?”', 1, 'Podría ser una gestión real, pero la identidad y la orden deben verificarse por un canal conocido antes de brindar información.'),
+  classify('¿Cómo evaluarías este pedido?', 'Un compañero conocido solicita acceso a un documento que normalmente utiliza, desde el canal corporativo habitual y con los permisos correspondientes.', 0, 'No todo pedido es un ataque. Cuando llega por el canal esperado y respeta permisos, puede ser legítimo.'),
+  classify('¿Cómo evaluarías este mensaje?', '“Soy la gerente. Estoy entrando a una reunión. Mandame urgente el listado de clientes a este correo personal.”', 1, 'La autoridad y la urgencia no reemplazan el procedimiento. Los datos sensibles y los correos personales requieren verificación.'),
+  q('¿Qué tienen en común los tres intentos?', ['Intentan explotar una falla técnica del sistema.', 'Intentan que Joaquín saltee controles usando confianza, urgencia o autoridad.', 'Necesitan conocer previamente su contraseña.'], 1, 'La ingeniería social busca influir sobre las decisiones de una persona para que eluda controles.'),
+  multi('¿Qué debería hacer Joaquín?', ['No compartir el código MFA.', 'Exigir el procedimiento de identificación para ingresar.', 'Verificar el pedido de la gerente por un canal conocido.', 'Responder rápidamente para evitar problemas.', 'Pedir más información al mismo contacto hasta estar convencido.'], ['No compartir el código MFA.', 'Exigir el procedimiento de identificación para ingresar.', 'Verificar el pedido de la gerente por un canal conocido.'], 'Las tres acciones mantienen los controles: no entregar secretos, validar el acceso físico y verificar pedidos por un canal independiente.')
+];
+
+const socialFinalCase = {
+  title: 'Una mañana complicada',
+  intro: 'Joaquín está trabajando cuando recibe tres solicitudes aparentemente urgentes.',
+  events: [
+    ['09:14', '📞', '“Soy Marcos de Soporte. Te acaba de llegar un código, ¿me lo dictás?”'],
+    ['09:18', '🚪', 'Una persona con uniforme intenta entrar detrás suyo: “Dejé mi credencial adentro.”'],
+    ['09:23', '💬', '“Soy Laura, la gerente. Mandame urgente el archivo de clientes a este correo personal.”']
+  ]
+};
+
+const socialModule = courseModules.find((module) => module.id === 'social');
+Object.assign(socialModule, {
+  subtitle: 'Reconocé la manipulación y verificá antes de actuar',
+  learn: {
+    title: 'Ingeniería social: cuando el ataque busca convencerte',
+    intro: 'No todos los ataques intentan vulnerar una computadora. En la ingeniería social, alguien busca manipularte para que entregues información, abras un acceso o realices una acción que normalmente no harías.',
+    phaseTitles: ['Ingeniería social: cuando el ataque busca convencerte', 'Las caras de la ingeniería social', 'FRENÁ · VERIFICÁ · PROTEGÉ'],
+    details: [
+      'El atacante puede hacerse pasar por un compañero, técnico, proveedor, cliente o autoridad. Que conozca tu nombre, empresa, cargo o compañeros no demuestra que sea quien dice ser: parte de esa información puede obtenerse públicamente.',
+      'Las técnicas cambian de forma, pero comparten una idea: apurarte o generar confianza antes de que verifiques. Reconocerlas permite cortar la manipulación a tiempo.',
+      '1. FRENÁ: no actúes automáticamente ante urgencia, presión, miedo o pedidos inesperados.\n\n2. VERIFICÁ: contactá a la persona u organización por un canal oficial que vos conozcas, no por el enlace, teléfono o contacto que te dieron.\n\n3. PROTEGÉ: no compartas contraseñas, códigos MFA ni datos sensibles; reportá la situación si corresponde.'
+    ],
+    points: [
+      ['El objetivo sos vos', 'Urgencia, autoridad, miedo, confianza, curiosidad o empatía pueden utilizarse para convencerte.'],
+      ['Reconocé la técnica', 'Identificar cómo te presionan ayuda a decidir con calma.'],
+      ['Los secretos no se negocian', 'Contraseñas, códigos MFA y accesos no se entregan en llamadas o chats inesperados.'],
+      ['Verificá de forma independiente', 'Usá un canal oficial conocido; responderle al posible atacante no es verificar.']
+    ],
+    explore: [null, [
+      { icon: '📞', title: 'Vishing', text: 'Engaño por llamada: puede simular soporte técnico, una empresa o una autoridad.' },
+      { icon: '🎭', title: 'Pretexting', text: 'Historia o identidad inventada para justificar un pedido de información.' },
+      { icon: '🚪', title: 'Tailgating', text: 'Entrar a un área restringida aprovechando el acceso de una persona autorizada.' },
+      { icon: '🎁', title: 'Baiting', text: 'Algo atractivo —un premio, archivo o dispositivo— busca despertar curiosidad.' },
+      { icon: '👀', title: 'Shoulder surfing', text: 'Observar una pantalla, PIN o contraseña mientras otra persona la utiliza.' }
+    ]]
+  },
+  minis: [
+    multi('¿Qué recursos usa este supuesto técnico para convencerte?', ['Urgencia', 'Autoridad aparente', 'Miedo', 'Recompensa'], ['Urgencia', 'Autoridad aparente', 'Miedo'], 'Puede combinar varias técnicas para parecer convincente. La urgencia nunca debe reemplazar la verificación.', '“Detectamos un acceso extraño. Necesito el código que acaba de llegarte para detenerlo. Tiene que ser ahora.”'),
+    q('Una persona intenta entrar detrás tuyo diciendo que olvidó su tarjeta. ¿Qué técnica está usando?', ['Baiting', 'Tailgating', 'Shoulder surfing'], 1, 'Tailgating es aprovechar el acceso de otra persona para ingresar a un lugar restringido.'),
+    q('¿Cómo verificás correctamente un pedido inesperado de tu supervisor?', ['Respondo al mismo mensaje preguntando si es él.', 'Llamo al número que aparece en el mensaje.', 'Contacto al supervisor mediante su número o canal corporativo habitual.'], 2, 'La verificación debe ser independiente. Si usás un medio proporcionado por el posible atacante, podrías seguir hablando con esa misma persona.')
+  ],
+  scenarios: [
+    { ...s('“Te llamo de Sistemas”', 'Martín · compañero de oficina', martinImage, 'Un supuesto técnico dice que necesita el usuario y el código MFA de Martín antes de que la cuenta se bloquee.', ['Pedirle al técnico su nombre completo y, si responde correctamente, darle el código.', 'Finalizar la llamada y contactar a Sistemas mediante un canal oficial conocido.', 'Darle el código MFA, pero no la contraseña.'], 1, 'Verificar no significa hacer más preguntas al mismo contacto. Un atacante preparado puede conocer nombres y datos internos; la verificación debe hacerse por un canal independiente.'), scene: 'call', signals: ['“Antes de que se bloquee” — genera urgencia', 'Pide un código de seis dígitos — solicita una credencial', 'Llega un MFA inesperado — alguien podría estar intentando ingresar'] },
+    { ...s('¿Me sostenés la puerta?', 'Carolina · acceso a zona restringida', carlaImage, 'Carolina entra con su credencial. Detrás aparece una persona con cajas: “Soy del proveedor de mantenimiento. Dejé mi tarjeta en la camioneta. ¿Me sostenés la puerta? Llego tardísimo.”', ['Dejarlo pasar porque parece pertenecer a un proveedor conocido.', 'Preguntarle el nombre del responsable y dejarlo pasar si lo conoce.', 'Indicarle que debe identificarse y utilizar el procedimiento de acceso correspondiente.'], 2, 'Ser amable no implica saltear controles de seguridad. Un uniforme, cajas o nombres internos no prueban autorización.'), scene: 'meeting', people: [carlaImage, pabloImage], signals: ['Intenta entrar detrás de una persona autorizada', 'Usa prisa y una historia creíble', 'No presenta una credencial válida'] },
+    s('El pendrive “Sueldos 2026”', 'Pendrive encontrado', '💾', 'Encontrás un pendrive etiquetado “Sueldos 2026” en un sector común de la oficina.', ['Lo reporto y no lo conecto.', 'Lo conecto en una computadora sin archivos importantes.', 'Lo llevo a casa para revisar de quién es.'], 0, 'Un dispositivo atractivo o curioso puede usarse como baiting. Debe reportarse sin conectarlo.')
+  ],
+  quizzes: socialQuizzes,
+  flow: [
+    { kind: 'learn', phase: 0, label: 'Aprendé' },
+    { kind: 'scenario', scenarioSlot: 0, label: 'Decidí' },
+    { kind: 'learn', phase: 1, label: 'Aprendé' },
+    { kind: 'scenario', scenarioSlot: 1, label: 'Decidí' },
+    { kind: 'quiz', questions: socialQuizzes.slice(0, 3), prefix: 'social-detect', title: 'Confiable o necesita verificación', label: 'Detectá' },
+    { kind: 'learn', phase: 2, label: 'Aprendé' },
+    { kind: 'quiz', questions: socialQuizzes.slice(3), prefix: 'social-final', title: 'Desafío final', label: 'Desafío', caseStudy: socialFinalCase }
+  ]
+});
+
+const groomingQuizzes = [
+  q('¿Qué estrategia puede estar utilizando el contacto?', ['Intentar aislar la relación y convertirla en un secreto.', 'Respetar la privacidad de la otra persona.', 'Evitar generar confianza demasiado rápido.'], 0, 'Pedir que una relación permanezca oculta puede aislar a la persona de quienes podrían advertir un riesgo.', '“No hace falta que tus padres sepan que hablamos; seguro lo entenderían mal.”'),
+  q('¿Qué debería llamar la atención?', ['Que los créditos hayan sido enviados por internet.', 'Que use un regalo para generar una obligación y conseguir algo a cambio.', 'Que ambos jueguen al mismo videojuego.'], 1, 'Un regalo nunca obliga a enviar fotos, información personal ni hacer algo que genere incomodidad.', '“Te regalé créditos para el juego varias veces. Ahora podrías mandarme esa foto que te pedí.”'),
+  q('¿Qué intenta hacer el contacto?', ['Respetar una decisión.', 'Verificar que el teléfono funcione.', 'Generar culpa y presión para obtener una respuesta.'], 2, 'La culpa y la presión pueden buscar que una persona haga algo que no quiere.', '“¿Por qué no contestás? Pensé que confiabas en mí. Si realmente somos amigos, demostralo.”'),
+  q('Camila compartió una foto privada y ahora la amenazan con publicarla si no envía otra. ¿Qué debería hacer?', ['Enviar una última foto y después bloquear.', 'No enviar más contenido, conservar las amenazas y pedir ayuda inmediatamente.', 'Amenazar con publicar información de la otra persona.'], 1, 'Ceder ante una amenaza puede generar nuevos pedidos. Es importante detener el contacto, conservar evidencia y buscar ayuda.'),
+  q('La persona elimina algunos mensajes después de enviarlos. ¿Qué sería útil hacer?', ['Guardar capturas o evidencia antes de que desaparezcan, sin difundirlas.', 'Compartirlas públicamente para advertir a otras personas.', 'Editarlas para explicarlo más fácil.'], 0, 'Conservar evidencia puede ayudar a pedir ayuda o reportar. Conservar no significa publicar ni reenviar.')
+];
+
+const groomingModule = courseModules.find((module) => module.id === 'grooming');
+Object.assign(groomingModule, {
+  subtitle: 'Reconocé señales, cuidá tu información y buscá ayuda',
+  learn: {
+    title: 'Grooming: cuando un contacto busca manipular',
+    intro: 'El grooming puede comenzar con conversaciones aparentemente inocentes. Una persona busca ganarse la confianza de un menor para obtener información, imágenes o proponer encuentros; por eso es importante reconocer cómo una charla puede cambiar con el tiempo.',
+    phaseTitles: ['Grooming: cómo puede comenzar', 'Lo que compartís también informa sobre vos', 'Pedir ayuda también es protegerse'],
+    details: [
+      'Puede haber perfiles falsos, halagos, regalos, secretos o pedidos de pasar a chats privados. Que alguien parezca amable o tenga intereses parecidos no garantiza que sea quien dice ser.',
+      'Una persona no necesita preguntarte directamente dónde vivís para conocer información personal. Fotos, historias, publicaciones y conversaciones pueden revelar mucho más de lo que parece.',
+      '1. Detené el contacto: no continúes negociando ni accedas a nuevos pedidos.\n\n2. Conservá evidencia: guardá usuario, mensajes, capturas y fechas.\n\n3. Bloqueá y reportá: usá las herramientas de la plataforma.\n\n4. Contáselo a un adulto de confianza: puede ayudarte a evaluar y buscar asistencia.'
+    ],
+    points: [
+      ['Reconocé el cambio', 'Secretos, presión y pedidos de información son señales de alerta.'],
+      ['Cuidá ubicación y rutinas', 'Una foto o publicación puede mostrar lugares, horarios, uniforme o datos de contacto.'],
+      ['No cedas ante la culpa', 'Un regalo, halago o amenaza no obliga a seguir una conversación.'],
+      ['No estás solo', 'Aunque ya se haya compartido algo, pedir ayuda sigue siendo la decisión correcta.']
+    ],
+    explore: [null, [
+      { icon: '📍', title: 'Ubicación', text: 'Una historia o foto con ubicación puede revelar lugares que frecuentás.' },
+      { icon: '🕐', title: 'Rutinas', text: 'Horarios, escuela o entrenamiento pueden mostrar tus movimientos.' },
+      { icon: '📸', title: 'Fotos y videos', text: 'Pueden mostrar uniforme, dirección o el frente de una casa sin notarlo.' },
+      { icon: '👤', title: 'Perfil personal', text: 'Edad, familiares y otras redes ayudan a construir información sobre vos.' },
+      { icon: '🔐', title: 'Privacidad', text: 'Un perfil privado ayuda, pero no reemplaza cuidar qué aceptás y compartís.' }
+    ]]
+  },
+  minis: [
+    multi('¿Qué señales aparecen en este mensaje?', ['Pide mantener un secreto', 'Pregunta por una rutina o momento de soledad', 'Presiona para responder de inmediato', 'Respeta los límites de la otra persona'], ['Pide mantener un secreto', 'Pregunta por una rutina o momento de soledad', 'Presiona para responder de inmediato'], 'Los secretos, las preguntas sobre rutinas y la presión son señales para detenerse y pedir ayuda.', '“No le cuentes a nadie que hablamos. ¿Cuándo estás solo? Contestame, confío en vos.”'),
+    multi('¿Qué pistas de esta publicación podrían revelar información personal?', ['Ubicación del colegio', 'Horario o rutina', 'Uniforme', 'El color favorito'], ['Ubicación del colegio', 'Horario o rutina', 'Uniforme'], 'Una publicación puede revelar información aunque nunca muestre una dirección o teléfono.', '“Terminando otro día. Nos vemos mañana como siempre a las 7:30.” · 📍 Colegio San Martín · Foto con uniforme'),
+    { kind: 'order', prompt: 'Ordená las acciones seguras ante un contacto preocupante.', options: ['Detener el contacto', 'Guardar evidencia', 'Bloquear o reportar', 'Contárselo a un adulto de confianza'], order: ['Detener el contacto', 'Guardar evidencia', 'Bloquear o reportar', 'Contárselo a un adulto de confianza'], feedback: 'Primero evitá seguir respondiendo; luego conservá evidencia, bloqueá o reportá y buscá apoyo en un adulto de confianza.' }
+  ],
+  scenarios: [
+    { ...s('El mensaje que pide secreto', 'Tomás · 14 años', '👤', 'Un contacto nuevo intenta que Tomás continúe una conversación privada.', ['Seguir hablando unos días para saber si realmente existe peligro.', 'Guardar capturas, bloquear la cuenta y hablar con un adulto de confianza.', 'Borrar todo para que nadie vea la conversación.'], 1, 'Los pedidos de secreto, de pasar a un chat privado y las preguntas sobre rutinas son señales de alerta. Lo seguro es conservar evidencia, bloquear y pedir ayuda.'), chatLines: [{ text: 'Sos de las pocas personas con las que puedo hablar de todo.' }, { text: 'Gracias, supongo.', mine: true }, { text: '¿Cuándo estás solo? Después hacemos videollamada, pero no le cuentes de mí a nadie.' }], signals: ['Pregunta cuándo está solo', 'Pide mantener la relación en secreto', 'Quiere pasar rápidamente a una conversación privada'] },
+    s('El regalo que genera presión', 'Tomás · 14 años', '👤', 'Un contacto le recuerda a Tomás los regalos que le hizo y le pide una foto a cambio.', ['Le explico que un regalo no obliga a enviar fotos y dejo de responder.', 'Le mando una foto sin mostrar la cara.', 'Acepto para no parecer desagradecido.'], 0, 'Los regalos no crean una obligación. Ante presión o incomodidad, hay que cortar el contacto y pedir ayuda.'),
+    { ...s('El contacto que cambió', 'Tomás · 14 años', '👤', 'Una conversación que parecía amistosa empieza a incluir secretos, preguntas personales y presión emocional.', ['Seguir hablando unos días para confirmar si realmente existe peligro.', 'Explicarle que descubriste sus intenciones y pedirle que no escriba más.', 'Dejar de responder, conservar la conversación, bloquear o reportar la cuenta y hablar con un adulto de confianza.'], 2, 'El grooming no siempre comienza con una amenaza. Puede avanzar mediante confianza, secretos, aislamiento, pedidos y culpa. Reconocer ese cambio permite actuar antes de que la situación escale.'), chatLines: [{ text: '¿Estás solo ahora?' }, { text: 'No, está mi hermano.', mine: true }, { text: 'Cuando estés solo hacemos videollamada. No le cuentes de mí porque seguro se mete.' }, { text: 'Dale, mandame una foto. Yo ya te mandé una.' }, { text: 'Pensé que confiabas en mí... después de todo lo que hablamos.' }], signals: ['Pregunta cuándo está solo', 'Pide secretos y aislamiento', 'Solicita una fotografía', 'Usa la confianza para generar culpa'] }
+  ],
+  quizzes: groomingQuizzes,
+  flow: [
+    { kind: 'learn', phase: 0, label: 'Aprendé' },
+    { kind: 'scenario', scenarioIndex: 0, label: 'Decidí' },
+    { kind: 'learn', phase: 1, label: 'Aprendé' },
+    { kind: 'quiz', questions: groomingQuizzes.slice(0, 3), prefix: 'grooming-signals', title: 'Detectá las señales', label: 'Detectá' },
+    { kind: 'quiz', questions: groomingQuizzes.slice(3), prefix: 'grooming-escalation', title: 'Cuando la situación cambia', label: 'Trivia' },
+    { kind: 'learn', phase: 2, label: 'Aprendé' },
+    { kind: 'scenario', scenarioIndex: 2, label: 'Desafío final' }
+  ]
+});
+
+socialModule.scenarios[0] = {
+  ...socialModule.scenarios[0],
+  visual: pabloImage,
+  chatAvatar: pabloImage,
+  chatName: 'Diego · Soporte técnico',
+  callLines: [
+    { text: 'Hola Martín, ¿cómo estás? Soy Diego, de Sistemas.' },
+    { text: 'Hola. Todo bien.', mine: true },
+    { text: 'Disculpá que te moleste. Estamos revisando unas cuentas porque hubo un problema esta mañana.' },
+    { text: 'Ah, no sabía.', mine: true },
+    { text: 'Sí. ¿Seguís trabajando en Administración?' },
+    { text: 'Sí.', mine: true },
+    { text: 'Perfecto. Tu usuario aparece entre los afectados.' },
+    { text: '¿Qué tengo que hacer?', mine: true },
+    { text: 'Necesitamos solucionarlo ahora porque en unos minutos podría bloquearse tu cuenta.', pause: 900 },
+    { text: 'Ahí te tuvo que llegar un código de seis dígitos. Dictámelo y termino la verificación.', pause: 900 }
+  ],
+  noticeAt: 9,
+  signalPrompt: 'Seleccioná las 3 señales más importantes.',
+  signalSuccess: 'Detectaste el patrón: urgencia + autenticación inesperada + solicitud del código MFA. Varias señales combinadas aumentan el riesgo.',
+  signalError: 'No toda llamada de Sistemas es sospechosa por sí sola. Buscá la combinación de urgencia, un código no solicitado y el pedido de compartirlo.',
+  signals: [
+    { text: 'La persona dice trabajar en Sistemas', valid: false },
+    { text: 'Pregunta si Martín trabaja en Administración', valid: false },
+    { text: 'Genera urgencia diciendo que la cuenta puede bloquearse', valid: true },
+    { text: 'Martín recibe un código que él no solicitó', valid: true },
+    { text: 'La llamada llega durante el horario laboral', valid: false },
+    { text: 'Solicita que Martín dicte el código MFA', valid: true }
+  ]
+};
+
+socialModule.scenarios[1] = {
+  ...socialModule.scenarios[1],
+  signalPrompt: 'Seleccioná las 2 señales que requieren verificación.',
+  signals: [
+    { text: 'La persona lleva cajas', valid: false },
+    { text: 'Pide entrar detrás de Carolina sin identificarse', valid: true },
+    { text: 'Dice trabajar para mantenimiento', valid: false },
+    { text: 'No presenta una credencial válida y usa la prisa para apurar', valid: true }
+  ]
+};
+
+groomingModule.scenarios[0] = {
+  ...groomingModule.scenarios[0],
+  visual: pabloImage,
+  chatAvatar: pabloImage,
+  chatName: 'Nico16',
+  chatLines: [
+    { text: '¡Hola! ¿Jugás siempre a esta hora?' },
+    { text: 'Más o menos, cuando termino las cosas del colegio.', mine: true },
+    { text: 'Jajaja, yo también. ¿Viste que salió la actualización nueva del juego?' },
+    { text: 'Sí, todavía no la probé.', mine: true },
+    { text: 'Después jugamos si querés.' },
+    { text: 'Dale.', mine: true },
+    { text: 'Che, ¿estás solo ahora?', pause: 750 },
+    { text: 'No, está mi hermano.', mine: true },
+    { text: 'Cuando estés solo hacemos videollamada. No le cuentes de mí porque seguro se mete.', pause: 950 },
+    { text: 'Mejor pasame tu Instagram y hablamos tranquilos por ahí.' },
+    { text: '¿Para qué?', mine: true },
+    { text: 'Es más cómodo. Dale, mandame una foto. Yo ya te mandé una.', pause: 950 },
+    { text: 'No sé...', mine: true },
+    { text: 'Pensé que confiabas en mí... después de todo lo que hablamos.', pause: 1050 }
+  ],
+  signalPrompt: 'Seleccioná las 4 situaciones que deberían generar sospecha.',
+  signalSuccess: 'Encontraste las señales principales. El riesgo aparece al analizar aislamiento, pedidos de información privada y presión emocional.',
+  signalError: 'No toda conversación con alguien desconocido es grooming. Prestá atención a los intentos de aislamiento, secreto, obtención de información personal y presión.',
+  signals: [
+    { text: 'Pregunta cuándo está solo', valid: true },
+    { text: 'Habla sobre la actualización del videojuego', valid: false },
+    { text: 'Pide mantener la relación en secreto', valid: true },
+    { text: 'Lo invita a jugar otra partida', valid: false },
+    { text: 'Intenta llevarlo a un espacio más privado', valid: true },
+    { text: 'Pregunta si ya probó la actualización', valid: false },
+    { text: 'Pide una foto y usa la confianza para presionarlo', valid: true }
+  ]
+};
+
+groomingModule.scenarios[2] = {
+  ...groomingModule.scenarios[2],
+  visual: martinImage,
+  chatAvatar: martinImage,
+  chatName: 'Mati_gamer',
+  chatLines: [
+    { text: 'Me gustó mucho hablar con vos estos días.' },
+    { text: 'A mí también.', mine: true },
+    { text: 'No le cuentes a nadie de nosotros; hay gente que no entiende.' },
+    { text: '¿Por qué?', mine: true },
+    { text: 'Porque es algo nuestro. ¿Me mandás una foto ahora? Si no, me voy a sentir mal.', pause: 900 },
+    { text: 'No quiero.', mine: true },
+    { text: 'Pensé que confiabas en mí. Después de todo lo que hablamos, me decepciona.', pause: 1000 }
+  ],
+  signalPrompt: 'Seleccioná las 3 señales que muestran que la conversación cambió.',
+  signals: [
+    { text: 'Dice que le gustó hablar con Tomás', valid: false },
+    { text: 'Pide que mantenga la relación en secreto', valid: true },
+    { text: 'Pregunta por qué Tomás duda', valid: false },
+    { text: 'Pide una foto y usa culpa para presionarlo', valid: true },
+    { text: 'Le dice que es algo “nuestro” para aislarlo', valid: true }
+  ]
+};
+
+const passwordFinalQuestions = [
+  q('¿Cuál es la mejor descripción de una contraseña segura?', ['Una frase extensa, única y difícil de relacionar con vos.', 'La misma clave compleja para todas las cuentas.', 'Una fecha de nacimiento con un símbolo.'], 0, 'La longitud y la unicidad reducen el riesgo de que una filtración afecte otras cuentas.'),
+  multi('¿Qué elementos ayudan a proteger una cuenta?', ['Usar una contraseña única', 'Activar MFA', 'Guardar códigos de recuperación en un lugar seguro', 'Aprobar cualquier notificación MFA para que desaparezca', 'Compartir el código con soporte que llama'], ['Usar una contraseña única', 'Activar MFA', 'Guardar códigos de recuperación en un lugar seguro'], 'MFA y los códigos de recuperación son capas de seguridad; nunca se comparten ni se aprueban sin haber iniciado el acceso.'),
+  q('Recibís una alerta de inicio de sesión que no reconocés. ¿Cuál es el primer canal adecuado?', ['La app o web oficial del servicio.', 'El enlace del mensaje recibido.', 'Un chat que ofrece resolverlo rápido.'], 0, 'Entrá mediante la aplicación o dirección oficial que ya conocés; así evitás seguir un enlace falso.'),
+  multi('Si sospechás que una clave fue expuesta, ¿qué corresponde?', ['Cambiarla de inmediato', 'Cerrar sesiones abiertas cuando esté disponible', 'Revisar actividad y reportar si corresponde', 'Esperar unos días para confirmar', 'Usar la misma clave con un símbolo nuevo en todas las cuentas'], ['Cambiarla de inmediato', 'Cerrar sesiones abiertas cuando esté disponible', 'Revisar actividad y reportar si corresponde'], 'Actuar rápido limita el acceso no autorizado. Una variación mínima de una clave reutilizada no es suficiente.')
+];
+
+const passwordsModule = courseModules.find((module) => module.id === 'passwords');
+Object.assign(passwordsModule, {
+  subtitle: 'Protegé tu identidad, tus claves y tus accesos',
+  learn: {
+    title: 'Tu contraseña protege mucho más que una cuenta',
+    intro: 'Una contraseña es una prueba de identidad. Si otra persona la conoce, puede actuar en tu nombre, consultar información o cambiar la forma de recuperar una cuenta.',
+    phaseTitles: ['Tu contraseña protege tu identidad', 'Contraseñas que resisten mejor', 'MFA y recuperación: la segunda barrera'],
+    details: ['Una contraseña segura no necesita ser imposible de recordar: una frase larga con palabras no relacionadas es más resistente que un dato personal con números. Cada cuenta importante merece una clave única.', 'Una filtración de una página no debería abrir otras cuentas. Por eso no reutilices claves y evitá nombres, fechas, mascotas o combinaciones previsibles.', 'MFA agrega una segunda prueba de identidad. Un código o aprobación confirma que sos vos; si no iniciaste el acceso, no lo apruebes ni lo compartas. Usá siempre el sitio o la app oficial para revisar la cuenta.'],
+    points: [['Frases extensas y únicas', 'Usá varias palabras no relacionadas y una clave distinta por cuenta.'], ['Evitá datos personales', 'Fechas, nombres y patrones previsibles suelen ser fáciles de descubrir.'], ['MFA no se comparte', 'Un código o una aprobación inesperada puede indicar un intento de acceso.'], ['Recuperá de forma segura', 'Guardá códigos de recuperación en un lugar seguro, nunca en un chat o nota visible.']],
+    explore: [[{ icon: '🧠', title: 'Frase de contraseña', text: 'Varias palabras no relacionadas forman una clave larga y memorable.' }, { icon: '🔁', title: 'Claves únicas', text: 'Cada servicio necesita una contraseña diferente para limitar filtraciones.' }, { icon: '📲', title: 'MFA', text: 'Agrega una segunda confirmación cuando iniciás sesión.' }, { icon: '🗝️', title: 'Recuperación', text: 'Los códigos de respaldo deben guardarse fuera de la vista de otras personas.' }]]
+  },
+  minis: [q('¿Cuál de estos elementos demuestra una contraseña más segura?', ['MiNombre2026!', 'Tren!Nube_47Lima', '15-08-2004#'], 1, 'Una frase o combinación extensa, única y sin datos personales es mucho más difícil de adivinar.'), q('¿Qué decisión limita mejor el daño si una web sufre una filtración?', ['Usar una clave única por cuenta.', 'Reutilizar la misma clave fuerte.', 'Cambiar solamente un número en la misma clave.'], 0, 'Las claves únicas evitan que una filtración se propague a otros servicios.'), { kind: 'order', prompt: 'Ordená los pasos ante una aprobación MFA que no solicitaste.', options: ['No aprobar la solicitud', 'Entrar por la app o web oficial', 'Revisar actividad y proteger la cuenta', 'Reportar si corresponde'], order: ['No aprobar la solicitud', 'Entrar por la app o web oficial', 'Revisar actividad y proteger la cuenta', 'Reportar si corresponde'], feedback: 'No apruebes una solicitud inesperada. Verificá desde un acceso oficial, protegé la cuenta y reportá según corresponda.' }],
+  scenarios: [
+    { ...passwordsModule.scenarios[0], title: 'El código que “necesita Soporte”', person: 'Diego · supuesto soporte técnico', visual: joaquinImage, chatAvatar: joaquinImage, chatName: 'Diego · Soporte', scene: 'call', callLines: [{ text: 'Hola, te llamo de Soporte. Detectamos un intento de acceso a tu cuenta.' }, { text: '¿Qué tengo que hacer?', mine: true }, { text: 'Lo resolvemos ahora. En unos minutos podría bloquearse.' }, { text: '¿Es algo grave?', mine: true }, { text: 'Te llegó un código de seis dígitos. Dictámelo y termino la verificación.', pause: 900 }], noticeAt: 4, signals: [{ text: 'Dice trabajar en Soporte', valid: false }, { text: 'Genera urgencia con un supuesto bloqueo', valid: true }, { text: 'Llega un código que no solicitaste', valid: true }, { text: 'La llamada ocurre durante horario laboral', valid: false }, { text: 'Pide que dictes el código MFA', valid: true }], signalPrompt: 'Seleccioná las 3 señales que requieren detenerse y verificar.', options: ['Dictar el código porque lo pidió Soporte.', 'Cortar la llamada y verificar desde un canal oficial, sin compartir el código.', 'Pedirle que confirme tu nombre antes de darle el código.'], answer: 1, feedback: 'Un técnico legítimo no necesita tu contraseña ni el código MFA. La verificación debe hacerse por un canal oficial e independiente.' },
+    { ...passwordsModule.scenarios[1], title: 'La clave junto al monitor', person: 'Puesto de trabajo compartido', visual: '🗒️', text: 'Al llegar a una sala encontrás una nota junto al monitor: “Clave VPN: Oficina2026!”. La persona que usa ese puesto vuelve en unos minutos.', options: ['Dejarla donde está para que la persona no la olvide.', 'Guardar una foto de la nota por si la persona la necesita.', 'Evitar usarla, avisar a la persona y sugerir un gestor o una frase de contraseña segura.'], answer: 2, feedback: 'Las credenciales no deben quedar visibles ni fotografiarse. Un gestor aprobado o una frase segura evita exponerlas.' }
+  ],
+  quizzes: passwordFinalQuestions,
+  flow: [
+    { kind: 'learn', phase: 0, label: 'Aprendé' },
+    { kind: 'scenario', scenarioIndex: 0, label: 'Decidí' },
+    { kind: 'inspection', activityId: 'password-inspection', label: 'Investigá', title: '¿Qué hace fuerte a esta contraseña?', intro: 'Marcá las 4 características que ayudan a que una clave sea más resistente.', items: [{ icon: '↔️', label: 'Es extensa' }, { icon: '🧩', label: 'Usa palabras no relacionadas' }, { icon: '♻️', label: 'Es única para esa cuenta' }, { icon: '🙈', label: 'No usa datos personales' }, { icon: '🎂', label: 'Contiene una fecha de nacimiento' }, { icon: '👤', label: 'Incluye el nombre de la persona' }, { icon: '123', label: 'Sigue un patrón previsible' }], answers: ['Es extensa', 'Usa palabras no relacionadas', 'Es única para esa cuenta', 'No usa datos personales'], feedback: 'Una clave larga y única, sin información que pueda asociarse a vos, es más difícil de adivinar y limita el impacto de una filtración.' },
+    { kind: 'classification', activityId: 'password-classification', label: 'Clasificá', title: '¿Qué harías con cada acceso?', intro: 'Separá las prácticas que protegen una cuenta de las que requieren corrección.', categories: ['Protege la cuenta', 'Requiere corrección'], items: [{ icon: '🔐', label: 'Activar MFA', category: 'Protege la cuenta' }, { icon: '📩', label: 'Compartir un código por chat', category: 'Requiere corrección' }, { icon: '🗃️', label: 'Usar un gestor aprobado', category: 'Protege la cuenta' }, { icon: '🗒️', label: 'Dejar una clave escrita a la vista', category: 'Requiere corrección' }, { icon: '🔁', label: 'Reutilizar una misma clave', category: 'Requiere corrección' }, { icon: '🔄', label: 'Cambiar una clave expuesta', category: 'Protege la cuenta' }], feedback: 'Proteger el acceso combina buenas claves, MFA, manejo seguro de recuperación y una respuesta rápida ante una posible exposición.' },
+    { kind: 'scenario', scenarioIndex: 1, label: 'Decidí' },
+    { kind: 'learn', phase: 2, label: 'Aprendé' },
+    { kind: 'quiz', questions: passwordFinalQuestions, prefix: 'password-final', title: 'Desafío final: protegé tu acceso', label: 'Desafío', caseStudy: { title: 'La cuenta de Camila', intro: 'Camila reutilizaba una clave y recibe una alerta de acceso que no inició.', events: [['Alerta', '📲', 'Llega una aprobación MFA inesperada.'], ['Revisión', '🔎', 'En la actividad aparece un dispositivo desconocido.'], ['Respuesta', '🛡️', 'Camila ingresa desde la app oficial para proteger la cuenta.']] } }
+  ]
+});
+
+const emailFinalQuestions = [
+  multi('¿Qué señales del cambio de cuenta bancaria requieren verificación?', ['El dominio no coincide con el proveedor habitual', 'Solicita cambiar datos bancarios', 'Genera urgencia para pagar hoy', 'Conoce el número de proveedor', 'El mensaje tiene un logo profesional'], ['El dominio no coincide con el proveedor habitual', 'Solicita cambiar datos bancarios', 'Genera urgencia para pagar hoy'], 'Un pago esperado, un nombre conocido o un logo correcto no reemplazan la verificación independiente.'),
+  q('¿Qué canal usás para validar un cambio bancario?', ['Responder al mismo correo.', 'Llamar o escribir mediante un contacto oficial previamente conocido.', 'Usar el enlace incluido para revisar la cuenta.'], 1, 'La verificación debe hacerse por un canal que no provenga del mensaje sospechoso.'),
+  q('Federico confirma que no modificaron sus datos bancarios. ¿Qué hacés con el email?', ['Lo reportás por el mecanismo establecido.', 'Lo eliminás y no lo comentás.', 'Lo reenviás a contactos externos.'], 0, 'Reportar ayuda a advertir a otras personas y a contener un intento de fraude.'),
+  multi('Antes de enviar un email con información, ¿qué comprobás?', ['Que los destinatarios sean correctos', 'Que el adjunto sea el archivo necesario', 'Que los permisos o el canal sean adecuados', 'Que todas las direcciones externas estén expuestas en CC', 'Que se envíe rápido aunque haya dudas'], ['Que los destinatarios sean correctos', 'Que el adjunto sea el archivo necesario', 'Que los permisos o el canal sean adecuados'], 'La seguridad también depende de cómo enviamos información: destinatarios, adjuntos, permisos y canal deben ser los adecuados.')
+];
+
+const emailModule = courseModules.find((module) => module.id === 'email');
+Object.assign(emailModule, {
+  subtitle: 'Leé, investigá, enviá y validá correos con seguridad',
+  learn: {
+    title: 'Un email tiene más información de la que parece',
+    intro: 'Un nombre conocido, un logo o un mensaje bien escrito no demuestran quién envió un correo. Antes de actuar, aprendé dónde mirar.',
+    phaseTitles: ['No confíes solamente en lo que ves', 'Investigá antes de hacer clic', 'La seguridad también importa antes de enviar'],
+    details: ['El nombre visible puede modificarse, un logo puede copiarse y conocer tu nombre no confirma una identidad. Revisá siempre la dirección completa, el dominio y el contexto del mensaje.', 'Un enlace puede mostrar un texto diferente de su destino real. Los adjuntos también requieren contexto: preguntate si esperabas recibirlos y verificá por un canal independiente cuando algo no cierre.', 'Antes de enviar, comprobá destinatarios, CC o CCO según corresponda, adjuntos, información necesaria y permisos. Una fuga puede ocurrir con un email legítimo enviado a la persona equivocada.'],
+    points: [['Remitente y dominio', 'Revisá la dirección completa después de @, no solo el nombre que se muestra.'], ['Enlaces y adjuntos', 'No abras por confianza o apuro: verificá destino, extensión y contexto.'], ['Destinatarios correctos', 'La identidad del destinatario y el canal son dos decisiones diferentes.'], ['Permisos mínimos', 'Compartí solamente la información necesaria por un medio autorizado.']],
+    explore: [[{ icon: '👤', title: 'Nombre visible', text: 'Puede modificarse con facilidad; por sí solo no demuestra identidad.' }, { icon: '📧', title: 'Dirección completa', text: 'El dominio después de @ ayuda a verificar quién envió el correo.' }, { icon: '⚠️', title: 'Asunto', text: 'La urgencia puede intentar acelerar una decisión.' }, { icon: '🔗', title: 'Botón o enlace', text: 'El texto visible puede ser diferente del sitio al que dirige.' }, { icon: '🖼️', title: 'Logo', text: 'Una imagen puede copiarse y no prueba que el correo sea legítimo.' }]],
+  },
+  minis: [q('¿Cuál de estos elementos demuestra por sí solo que un correo es legítimo?', ['El logo oficial', 'Que conozca tu nombre', 'Ninguno de los anteriores'], 2, 'Un logo, un nombre o un mensaje bien escrito pueden copiarse. La legitimidad se valida revisando el contexto y los datos reales.'), q('¿Qué hacés ante un enlace inesperado?', ['Lo abrís en una ventana privada.', 'Verificás el asunto desde la web o app oficial, sin usar el enlace.', 'Se lo reenviás a un compañero.'], 1, 'Una ventana privada no vuelve confiable un enlace. Usá un acceso oficial que ya conozcas.'), multi('Encontrá los problemas antes de enviar este correo.', ['Destinatario incorrecto', 'Archivo con información innecesaria', 'Direcciones externas expuestas entre sí', 'Asunto del correo', 'Firma corporativa'], ['Destinatario incorrecto', 'Archivo con información innecesaria', 'Direcciones externas expuestas entre sí'], 'Una fuga puede producirse por destinatarios, copias o adjuntos mal revisados, aunque el correo sea legítimo.')],
+  scenarios: [
+    { ...emailModule.scenarios[0], title: '¿Me lo reenviás?', person: 'Julieta · compañera de equipo', visual: sofiaImage, chatAvatar: sofiaImage, chatName: 'Julieta', chatLines: [{ text: 'Hola! ¿Cómo venís con el proyecto?' }, { text: 'Bien, ya terminé mi parte.', mine: true }, { text: 'Genial 🙌 Yo estoy desde casa y no puedo entrar al correo laboral.' }, { text: '¿Te aparece algún error?', mine: true }, { text: 'Sí, después lo veo con Sistemas. Mientras tanto, ¿me reenviás el archivo del proyecto a mi Gmail personal?' }, { text: '¿El que tiene la información de clientes?', mine: true }, { text: 'Sí. Es solamente para avanzar hoy. Nos conocemos, quedate tranquilo 😅', pause: 850 }], signals: [{ text: 'Julieta está trabajando desde su casa', valid: false }, { text: 'Solicita información laboral en una cuenta personal', valid: true }, { text: 'El archivo contiene información de clientes', valid: true }, { text: 'Julieta saluda de manera informal', valid: false }, { text: 'Propone evitar temporalmente el canal corporativo', valid: true }, { text: 'Dice que será solamente por hoy', valid: false }], signalPrompt: 'Elegí las 3 cuestiones relevantes antes de decidir.', options: ['Reenviar el archivo porque conocés a Julieta.', 'Mandar capturas por WhatsApp para que pueda avanzar.', 'Esperar o restablecer el acceso y utilizar el canal autorizado.'], answer: 2, feedback: 'La identidad del destinatario y el canal son dos cosas distintas. Aunque conozcas a Julieta, una cuenta personal no es un medio autorizado para información laboral.' },
+    { ...emailModule.scenarios[1], title: 'El adjunto inesperado', scene: 'email', email: { senderName: 'Laura Fernández', sender: 'laura@proveedor-example.com', subject: 'RE: Factura septiembre', message: 'Hola Andrés, te adjunto nuevamente el comprobante que habíamos hablado. ¿Podés revisarlo antes de las 16? Gracias.', attachment: 'Factura_0926.pdf.exe' }, options: ['Abrirlo porque conocés a Laura.', 'Responder al mismo correo para confirmar.', 'Verificar el pedido mediante un canal conocido e independiente.'], answer: 2, feedback: 'Un remitente conocido tampoco garantiza el mensaje: una cuenta puede estar comprometida o alguien podría estar suplantándola. Verificá desde un contacto que ya conozcas.' }
+  ],
+  quizzes: emailFinalQuestions,
+  flow: [
+    { kind: 'learn', phase: 0, label: 'Aprendé' },
+    { kind: 'scenario', scenarioIndex: 0, label: 'Decidí' },
+    { kind: 'inspection', activityId: 'email-inspection', label: 'Investigá', title: '¿Quién envió realmente este correo?', intro: 'El mensaje parece profesional. Seleccioná las 3 pistas que generan sospecha.', email: { senderName: 'Microsoft 365', sender: 'soporte@micros0ft-seguridad.com', to: 'nicolas@empresa.com', subject: 'Tu contraseña vencerá hoy', message: 'Hola Nicolás: Su contraseña corporativa vencerá dentro de 2 horas. Mantenela activa verificando su identidad.', link: 'Revisar actividad → login-m365.seguridad-cuentas.example' }, items: [{ icon: '0️⃣', label: '“micros0ft” usa un cero' }, { icon: '🔗', label: 'El enlace lleva a otro dominio' }, { icon: '⏳', label: 'Genera urgencia para actuar' }, { icon: '🖼️', label: 'Tiene el logo de Microsoft' }, { icon: '🕥', label: 'Llegó a las 10:32' }, { icon: '✍️', label: 'No tiene errores ortográficos' }], answers: ['“micros0ft” usa un cero', 'El enlace lleva a otro dominio', 'Genera urgencia para actuar'], feedback: 'Un correo malicioso puede tener buen diseño y no tener errores. Lo importante es investigar el dominio, el destino del enlace y el contexto.' },
+    { kind: 'scenario', scenarioIndex: 1, label: 'Decidí' },
+    { kind: 'classification', activityId: 'email-inbox', label: 'Simulá', title: 'Inspeccioná tu bandeja de entrada', intro: 'Marcá qué correos podés continuar leyendo y cuáles requieren verificación antes de actuar.', categories: ['Puede continuar', 'Requiere verificar'], items: [{ icon: '👥', label: 'RRHH · Recordatorio: feriado del viernes', category: 'Puede continuar' }, { icon: '⚠️', label: 'Microsoft Seguridad · Cuenta suspendida', category: 'Requiere verificar' }, { icon: '📅', label: 'Carolina Méndez · Reunión 15:30', category: 'Puede continuar' }, { icon: '📎', label: 'Proveedor habitual · Factura septiembre PDF', category: 'Puede continuar' }, { icon: '💸', label: 'Director General · Transferencia urgente desde Gmail', category: 'Requiere verificar' }], feedback: 'No se trata de asumir que todo correo urgente es falso. La clave es identificar cuáles requieren revisar remitente, contexto y canal antes de actuar.' },
+    { kind: 'learn', phase: 2, label: 'Aprendé' },
+    { kind: 'quiz', questions: emailFinalQuestions, prefix: 'email-final', title: 'Desafío final: sos el último filtro', label: 'Desafío', caseStudy: { title: 'Cambio de cuenta bancaria', intro: 'El correo parece profesional, pero antes de pagar hay información que debe verificarse.', events: [['De', '📧', 'Administración <administracion@empresa-pagos.com>'], ['Asunto', '💳', 'Cambio de cuenta bancaria — Proveedor #284'], ['Contexto', '📌', 'Hay un pago real pendiente, pero el proveedor normalmente usa @empresa.com.'], ['Pedido', '⏱️', 'Solicitan confirmación y pago antes de las 14:00.']] } }
+  ]
+});
+
+const dataFinalQuestions = [
+  multi('¿Qué riesgos encontraste en esta oficina?', ['Computadora sin bloquear', 'Listado de clientes expuesto', 'Credencial a la vista', 'Documento en papelera común', 'Archivo con acceso “cualquiera con el enlace”', 'Una taza sobre el escritorio', 'Una planta junto a la ventana'], ['Computadora sin bloquear', 'Listado de clientes expuesto', 'Credencial a la vista', 'Documento en papelera común', 'Archivo con acceso “cualquiera con el enlace”'], 'Cada elemento puede exponer información o permitir un acceso no autorizado. La taza y la planta no son un riesgo por sí mismas.'),
+  q('¿Qué hacés si encontrás una computadora de un compañero sin bloquear?', ['La usás un momento si es urgente.', 'La bloqueás o avisás a la persona responsable, sin revisar información.', 'Le sacás una foto para demostrar el problema.'], 1, 'Una pantalla abierta puede dejar datos y sistemas al alcance de cualquiera.'),
+  q('Un archivo tiene acceso “cualquiera con el enlace”. ¿Qué corresponde?', ['Revisar permisos y limitar el acceso a quienes realmente lo necesitan.', 'Enviar el enlace a varios grupos para que no se pierda.', 'Dejarlo así porque no aparece en buscadores.'], 0, 'Compartir por enlace también requiere permisos mínimos y destinatarios definidos.'),
+  multi('¿Qué acciones ayudan si compartiste información por error?', ['Informar rápido lo ocurrido', 'Quitar o revocar el acceso si es posible', 'Cambiar credenciales si fueron expuestas', 'Ocultar el error para evitar un problema', 'Esperar a que alguien se dé cuenta'], ['Informar rápido lo ocurrido', 'Quitar o revocar el acceso si es posible', 'Cambiar credenciales si fueron expuestas'], 'Actuar rápido permite limitar el alcance. Ocultarlo o esperar suele aumentar el impacto.')
+];
+
+const dataModule = courseModules.find((module) => module.id === 'data');
+Object.assign(dataModule, {
+  subtitle: 'Cuidá la información antes de compartirla',
+  learn: {
+    title: 'Tus datos cuentan más de vos de lo que parece',
+    intro: 'Los datos aparecen en documentos, fotos, chats, archivos, dispositivos, redes y sistemas de trabajo. Un dato aislado puede parecer poco importante; varios datos combinados pueden revelar mucho más.',
+    phaseTitles: ['Tus datos cuentan más de vos de lo que parece', 'Antes de enviar: QUÉ · QUIÉN · PARA QUÉ · CÓMO', '¿Y si ya compartiste algo?'],
+    details: [
+      'Nombre, DNI, domicilio, teléfono, contraseñas, datos bancarios, clientes y documentos de trabajo merecen atención. La información de una organización también puede afectar a otras personas.',
+      'Antes de enviar información, confirmá qué dato es necesario, quién está autorizado a recibirlo, para qué lo necesita y cuál es el canal corporativo adecuado.',
+      'Si enviaste un archivo equivocado, detectaste permisos demasiado amplios o compartiste una credencial, no lo ocultes: informá rápido, quitá accesos cuando sea posible y seguí el procedimiento de la organización.'
+    ],
+    points: [
+      ['Datos personales', 'Nombre, DNI, domicilio, teléfono y fecha de nacimiento permiten identificarte.'],
+      ['Datos financieros y credenciales', 'Tarjetas, cuentas, contraseñas y códigos de recuperación requieren máxima protección.'],
+      ['Información laboral', 'Clientes, contratos, reportes y documentos internos no deben circular por medios personales.'],
+      ['La velocidad importa', 'Reportar un error a tiempo permite contenerlo y evitar que crezca.']
+    ],
+    explore: [[
+      { icon: '🪪', title: 'Datos personales', text: 'Nombre, DNI, domicilio, teléfono y fecha de nacimiento.' },
+      { icon: '💳', title: 'Datos financieros', text: 'Tarjetas, cuentas y movimientos bancarios.' },
+      { icon: '🔑', title: 'Credenciales', text: 'Usuarios, contraseñas y datos de recuperación.' },
+      { icon: '💼', title: 'Información laboral', text: 'Clientes, contratos, reportes y archivos internos.' },
+      { icon: '📸', title: 'Fotos y documentos', text: 'Pueden mostrar ubicación, nombres o datos sin querer.' }
+    ]]
+  },
+  minis: [
+    multi('¿Cuáles compartirías públicamente?', ['Una opinión sobre una película', 'Una receta de cocina', 'Tu DNI', 'Tu contraseña', 'El número de tu tarjeta', 'Tu domicilio completo'], ['Una opinión sobre una película', 'Una receta de cocina'], 'DNI, contraseñas, tarjetas y domicilio completo permiten fraudes, robos o suplantaciones.'),
+    multi('Andrea necesita coordinar una entrega con un proveedor. ¿Qué datos mínimos podría compartir?', ['Nombre del contacto', 'Dirección de entrega', 'Teléfono del contacto', 'DNI de todo el personal', 'Contraseña del sistema', 'Base completa de clientes'], ['Nombre del contacto', 'Dirección de entrega', 'Teléfono del contacto'], 'Compartí únicamente lo necesario para la tarea y mediante un canal autorizado.'),
+    { kind: 'order', prompt: 'Ordená los pasos ante un enlace con permisos demasiado amplios.', options: ['Revisar y limitar permisos', 'Verificar quién tuvo acceso', 'Informar según el procedimiento'], order: ['Revisar y limitar permisos', 'Verificar quién tuvo acceso', 'Informar según el procedimiento'], feedback: 'Primero contené el acceso, luego revisá el alcance y comunicá la situación para que pueda tratarse correctamente.' }
+  ],
+  scenarios: [{ ...dataModule.scenarios[0], title: '¿Me pasás la planilla?', person: 'Valeria · compañera de equipo', visual: carlaImage, chatAvatar: carlaImage, chatName: 'Valeria', chatLines: [{ text: 'Hola! Estoy terminando el informe desde casa.' }, { text: '¿Me mandás la planilla de clientes?' }, { text: '¿La que tiene teléfonos y mails?', mine: true }, { text: 'Sí, esa. Mandámela a mi Gmail porque desde acá no puedo entrar al correo de la empresa.' }, { text: 'valeria.personal@gmail.example' }, { text: 'Ah, mañana entro un poco más tarde 👍' }], signals: [{ text: 'La planilla contiene datos de clientes', valid: true }, { text: 'Solicita enviarla a un correo personal', valid: true }, { text: 'No puede acceder al canal corporativo habitual', valid: true }, { text: 'Valeria trabaja desde su casa', valid: false }, { text: 'El pedido llega por chat', valid: false }, { text: 'Dice que mañana llegará más tarde', valid: false }], signalPrompt: 'Seleccioná las 3 señales que requieren una verificación.', options: ['Enviar la planilla porque la conocés y necesita avanzar.', 'Confirmar la autorización y usar un canal corporativo aprobado.', 'Mandar una captura por una red social para que sea más fácil.'], answer: 1, feedback: 'Conocer a la persona no vuelve apropiado cualquier medio. Verificá qué se envía, a quién, para qué y por qué canal.' }],
+  quizzes: dataFinalQuestions,
+  flow: [
+    { kind: 'learn', phase: 0, label: 'Aprendé' },
+    { kind: 'scenario', scenarioIndex: 0, label: 'Decidí' },
+    { kind: 'learn', phase: 1, label: 'Aprendé' },
+    { kind: 'inspection', activityId: 'data-inspection', label: 'Investigá', title: '¿Qué revela este escritorio?', intro: 'Observá los elementos y marcá los 4 que podrían exponer información.', items: [{ icon: '💻', label: 'Pantalla desbloqueada' }, { icon: '🪪', label: 'Credencial visible' }, { icon: '🗒️', label: 'Post-it con clave' }, { icon: '📄', label: 'Documento con datos' }, { icon: '☕', label: 'Taza de café' }, { icon: '🪴', label: 'Planta' }, { icon: '🖱️', label: 'Mouse' }], answers: ['Pantalla desbloqueada', 'Credencial visible', 'Post-it con clave', 'Documento con datos'], feedback: 'Una pantalla, credencial, clave o documento visibles pueden dar acceso a información sin autorización.' },
+    { kind: 'classification', activityId: 'data-classification', label: 'Clasificá', title: '¿Qué nivel de cuidado requiere?', intro: 'Ubicá cada elemento según el tipo de información que contiene.', categories: ['Público', 'Personal o interno', 'Sensible o confidencial'], items: [{ icon: '🕘', label: 'Horario público de atención', category: 'Público' }, { icon: '💳', label: 'Número de tarjeta', category: 'Sensible o confidencial' }, { icon: '🪪', label: 'DNI', category: 'Sensible o confidencial' }, { icon: '🔐', label: 'Contraseña', category: 'Sensible o confidencial' }, { icon: '📋', label: 'Listado interno de clientes', category: 'Personal o interno' }, { icon: '📣', label: 'Publicación institucional', category: 'Público' }, { icon: '🩺', label: 'Historia clínica', category: 'Sensible o confidencial' }, { icon: '🍽️', label: 'Menú del comedor', category: 'Público' }], feedback: 'No toda la información requiere el mismo tratamiento. Clasificarla ayuda a elegir permisos, destinatarios y canales adecuados.' },
+    { kind: 'learn', phase: 2, label: 'Aprendé' },
+    { kind: 'quiz', questions: dataFinalQuestions, prefix: 'data-final', title: 'Desafío final: ¿dónde está la fuga?', label: 'Desafío', caseStudy: { title: 'Un día en la oficina', intro: 'Detectá riesgos antes de que la información llegue a quien no corresponde.', events: [['Escritorio', '💻', 'Una sesión quedó abierta y el listado de clientes está a la vista.'], ['Papelera', '📄', 'Hay documentos con datos que no fueron descartados de forma segura.'], ['Nube', '☁️', 'Un archivo sensible tiene permiso “cualquiera con el enlace”.']] } }
+  ]
+});
+
+const threatFinalQuestions = [
+  q('¿Cuál fue la vía de entrada más probable del incidente?', ['Un archivo malicioso recibido por email.', 'Una actualización oficial del sistema.', 'Un problema físico del teclado.'], 0, 'El archivo con doble extensión se presentó como PDF, pero era ejecutable.'),
+  q('¿Qué amenaza describe mejor lo ocurrido?', ['Smishing.', 'Ransomware.', 'Shoulder surfing.'], 1, 'El ransomware puede cifrar archivos e impedir el acceso a la información.'),
+  multi('¿Qué señales del caso requieren atención?', ['El archivo termina en .pdf.exe', 'Natalia no había solicitado el archivo', 'La computadora se vuelve lenta', 'Los documentos se renombran o no se pueden abrir', 'El mensaje menciona a RRHH', 'El email llegó en horario laboral'], ['El archivo termina en .pdf.exe', 'Natalia no había solicitado el archivo', 'La computadora se vuelve lenta', 'Los documentos se renombran o no se pueden abrir'], 'La doble extensión, un archivo inesperado y cambios anormales en el equipo son señales de alarma.'),
+  multi('¿Qué acciones son adecuadas?', ['Dejar de interactuar con el equipo', 'Seguir el procedimiento de aislamiento', 'Informar a IT o Seguridad', 'Conservar la información relevante del incidente', 'Pagar el rescate', 'Reiniciar repetidamente', 'Conectar un disco externo de respaldo'], ['Dejar de interactuar con el equipo', 'Seguir el procedimiento de aislamiento', 'Informar a IT o Seguridad', 'Conservar la información relevante del incidente'], 'No pagues, no sigas usando el equipo y no conectes respaldos: informar rápido ayuda a contener el incidente.')
+];
+
+const threatsModule = courseModules.find((module) => module.id === 'threats');
+Object.assign(threatsModule, {
+  subtitle: 'Reconocé la cadena de ataque y actuá a tiempo',
+  learn: {
+    title: 'Una amenaza puede empezar con una decisión cotidiana',
+    intro: 'Los ataques suelen buscar un primer paso: un clic, un archivo, una contraseña o una aprobación. Reconocer la cadena antes del daño permite frenarla.',
+    phaseTitles: ['Cómo puede empezar un incidente', 'Archivos y mensajes que merecen revisión', 'Detectar rápido también forma parte de la defensa'],
+    details: ['Phishing, smishing y vishing intentan que entregues datos o sigas un enlace. El malware puede llegar en adjuntos, archivos o dispositivos. El ransomware cifra información para impedir su uso.', 'Un nombre conocido, un logo o un archivo que parece PDF no son prueba de seguridad. Revisá el remitente, si esperabas el envío, el tipo de archivo y los pedidos de habilitar contenido o ejecutar algo.', '¿Abriste algo sospechoso, ingresaste datos, aprobaste un MFA inesperado o notaste archivos extraños? No ocultes el problema ni sigas intentando. Detené la interacción, usá los canales oficiales y reportá cuanto antes.'],
+    points: [['La cadena necesita un primer paso', 'Urgencia, curiosidad o miedo buscan que actúes antes de pensar.'], ['Distintas caras, mismo objetivo', 'Phishing, smishing, vishing y malware intentan obtener acceso o afectar información.'], ['Revisá extensiones', 'Un archivo .pdf.exe es ejecutable aunque el nombre intente parecer un documento.'], ['Reportar rápido protege', 'Informar permite aislar el incidente y reducir el impacto para todos.']],
+    explore: [[{ icon: '🎣', title: 'Phishing', text: 'Email o sitio falso que intenta obtener información o provocar una acción.' }, { icon: '💬', title: 'Smishing', text: 'Engaño por SMS o mensajería con enlaces y pedidos sospechosos.' }, { icon: '📞', title: 'Vishing', text: 'Llamada que simula ser soporte, banco o una persona de autoridad.' }, { icon: '🦠', title: 'Ransomware', text: 'Malware que cifra o bloquea archivos y puede exigir un pago.' }]]
+  },
+  minis: [multi('¿Qué señales aparecen en este email?', ['Genera urgencia', 'Incluye un enlace o archivo inesperado', 'Pide actuar sin verificar', 'Llega durante horario laboral'], ['Genera urgencia', 'Incluye un enlace o archivo inesperado', 'Pide actuar sin verificar'], 'El horario no vuelve confiable un mensaje. La urgencia y los pedidos inesperados deben verificarse.'), q('¿Cuál de estos archivos merece mayor sospecha?', ['Actualizacion_salarial.pdf.exe', 'Manual_de_bienvenida.pdf', 'Agenda_reunion.ics'], 0, 'La doble extensión intenta ocultar que el archivo es ejecutable.'), { kind: 'order', prompt: 'Ordená la respuesta ante una alerta de acceso que no reconocés.', options: ['Entrar por la app o web oficial', 'Revisar la actividad de la cuenta', 'Proteger las credenciales', 'Reportar si corresponde'], order: ['Entrar por la app o web oficial', 'Revisar la actividad de la cuenta', 'Proteger las credenciales', 'Reportar si corresponde'], feedback: 'Usá siempre un acceso oficial, revisá lo ocurrido, protegé la cuenta y comunicá la situación según corresponda.' }],
+  scenarios: [{ ...threatsModule.scenarios[1], title: 'El archivo de haberes', scene: 'email', email: { senderName: 'Recursos Humanos', sender: 'rrhh-actualizaciones@empresa-aviso.example', subject: 'Actualización de haberes solicitada', message: 'Natalia, te enviamos la actualización de haberes solicitada. Abrí el archivo para ver el detalle.', attachment: 'Actualizacion_salarial.pdf.exe' }, options: ['Abrirlo porque menciona a Recursos Humanos.', 'No abrirlo, verificar el pedido por un canal oficial y reportarlo si es sospechoso.', 'Reenviarlo a una cuenta personal para revisarlo.'], answer: 1, feedback: 'Un archivo inesperado con doble extensión puede ser ejecutable. Confirmá el supuesto envío con RRHH por un canal conocido.' }],
+  quizzes: threatFinalQuestions,
+  flow: [
+    { kind: 'learn', phase: 0, label: 'Aprendé' },
+    { kind: 'scenario', scenarioIndex: 0, label: 'Decidí' },
+    { kind: 'learn', phase: 1, label: 'Aprendé' },
+    { kind: 'inspection', activityId: 'threat-inspection', label: 'Analizá', title: '¿Qué tiene de sospechoso este envío?', intro: 'Marcá las 4 pistas que justifican frenar y verificar.', items: [{ icon: '📎', label: 'Archivo .pdf.exe' }, { icon: '❓', label: 'No fue solicitado' }, { icon: '⚡', label: 'Pedido urgente' }, { icon: '🏷️', label: 'Remitente no verificado' }, { icon: '🕘', label: 'Llegó en horario laboral' }, { icon: '🏢', label: 'Menciona a RRHH' }, { icon: '✉️', label: 'Tiene asunto' }], answers: ['Archivo .pdf.exe', 'No fue solicitado', 'Pedido urgente', 'Remitente no verificado'], feedback: 'La combinación de archivo ejecutable, envío inesperado, presión y remitente dudoso requiere una verificación independiente.' },
+    { kind: 'classification', activityId: 'threat-classification', label: 'Clasificá', title: '¿Qué estás viendo?', intro: 'Relacioná cada situación con el tipo de evento más adecuado.', categories: ['Canal de ataque', 'Señal de riesgo', 'Respuesta segura'], items: [{ icon: '📧', label: 'Email con enlace falso', category: 'Canal de ataque' }, { icon: '📞', label: 'Llamada que pide un código MFA', category: 'Canal de ataque' }, { icon: '🔗', label: 'URL parecida a la oficial', category: 'Señal de riesgo' }, { icon: '📂', label: 'Archivos renombrados o inaccesibles', category: 'Señal de riesgo' }, { icon: '🛑', label: 'Detener la interacción', category: 'Respuesta segura' }, { icon: '📣', label: 'Reportar a IT o Seguridad', category: 'Respuesta segura' }], feedback: 'Distinguir cómo llega una amenaza, qué señales deja y cómo responder permite decidir sin improvisar.' },
+    { kind: 'learn', phase: 2, label: 'Aprendé' },
+    { kind: 'quiz', questions: threatFinalQuestions, prefix: 'threat-final', title: 'Desafío final: el incidente de Natalia', label: 'Desafío', caseStudy: { title: 'El incidente de Natalia', intro: 'La secuencia muestra cómo un clic puede convertirse en un incidente.', progressive: true, events: [['09:04', '📧', 'Llega un email de “RRHH” con Actualizacion_salarial.pdf.exe.'], ['09:07', '🖱️', 'Natalia abre el archivo pensando que era un PDF.'], ['09:09', '🐢', 'La computadora se vuelve lenta.'], ['09:11', '📂', 'Sus documentos cambian de nombre y dejan de abrirse.'], ['09:12', '⚠️', 'Aparece un aviso: “Tus archivos fueron cifrados”.']] } }
+  ]
+});
+
+export const finalQuestions = [
+  { module: 'passwords', prompt: '¿Cuál es la respuesta más segura ante esta llamada?', context: '📞 “Soy de Soporte. Te llegó un código de seis dígitos: dictámelo así termino la verificación antes de que tu cuenta se bloquee.”', options: ['Dictar el código porque la persona dice ser de Soporte.', 'Cortar la llamada y verificar desde un canal oficial, sin compartir el código.', 'Pedirle al contacto que repita tu nombre antes de darle el código.'], answer: 1, feedback: 'Un código MFA es personal. Un soporte legítimo no debe pedirlo por una llamada inesperada.' },
+  { module: 'email', prompt: '¿Qué hacés antes de pagar?', context: '📧 Administración <administracion@empresa-pagos.com> avisa un cambio de CBU de un proveedor y pide confirmación antes de las 14:00. El proveedor normalmente usa @empresa.com.', options: ['Verificar el cambio mediante un contacto oficial previamente conocido.', 'Responder al mismo correo para preguntar si es correcto.', 'Realizar el pago porque existe una factura pendiente.'], answer: 0, feedback: 'Un dominio distinto, un cambio bancario y la urgencia requieren validación por un canal independiente.' },
+  { ...multi('¿Qué riesgos hay en este puesto de trabajo?', ['Pantalla desbloqueada', 'Listado de clientes expuesto', 'Credencial visible', 'Taza de café', 'Planta junto a la ventana'], ['Pantalla desbloqueada', 'Listado de clientes expuesto', 'Credencial visible'], 'La pantalla, el listado y la credencial pueden exponer datos o accesos. La taza y la planta no son un riesgo por sí mismas.', '💻 Camila se aleja a almorzar y deja su PC abierta, un listado de clientes sobre la mesa y su credencial visible.'), module: 'data' },
+  { module: 'threats', prompt: '¿Qué amenaza parece estar ocurriendo?', context: '💻 Después de abrir Factura_Septiembre.pdf.exe, el equipo se vuelve lento y los documentos pasan a llamarse “.locked”. Luego aparece un pedido de pago.', options: ['Ransomware.', 'Smishing.', 'Vishing.'], answer: 0, feedback: 'El cifrado de archivos y la exigencia de pago son señales características de ransomware.' },
+  { ...multi('¿Qué acciones son adecuadas ante este incidente?', ['Dejar de interactuar con el equipo', 'Seguir el procedimiento de aislamiento', 'Informar a IT o Seguridad', 'Pagar para recuperar los archivos', 'Conectar un respaldo externo enseguida'], ['Dejar de interactuar con el equipo', 'Seguir el procedimiento de aislamiento', 'Informar a IT o Seguridad'], 'No sigas usando el equipo, no pagues ni conectes respaldos. Informar rápido ayuda a contener el incidente.', '🚨 Varios archivos se vuelven inaccesibles y aparece una advertencia de cifrado.'), module: 'threats' },
+  { module: 'social', prompt: '¿Cómo respondés a este pedido?', context: '🚪 Una persona con cajas intenta entrar detrás tuyo: “Soy del proveedor de mantenimiento, olvidé mi credencial y llego tarde”.', options: ['Dejarla pasar porque parece pertenecer al proveedor.', 'Indicarle que debe identificarse y usar el procedimiento de acceso.', 'Prestarle tu credencial para que no se retrase.'], answer: 1, feedback: 'La prisa, un uniforme o una historia creíble no reemplazan la identificación y el procedimiento.' },
+  { module: 'grooming', prompt: '¿Qué decisión protege mejor a Tomás?', context: '💬 Un contacto nuevo pregunta cuándo está solo, pide que no le cuente a nadie y lo presiona para que envíe una foto.', options: ['Dejar de responder, guardar evidencia, bloquear o reportar y hablar con un adulto de confianza.', 'Seguir hablando unos días para confirmar sus intenciones.', 'Borrar toda la conversación para que nadie la vea.'], answer: 0, feedback: 'Secretos, aislamiento, pedidos de imágenes y presión son señales para cortar el contacto y pedir ayuda.' },
+  { module: 'passwords', prompt: '¿Cuál de estas prácticas reduce mejor el impacto de una filtración?', context: '🔐 Una página que usabas informa que expuso contraseñas de sus usuarios.', options: ['Usar una contraseña única para cada cuenta.', 'Mantener la misma contraseña si es larga.', 'Cambiar solo un número y reutilizarla.'], answer: 0, feedback: 'Las claves únicas impiden que una filtración en un servicio abra otras cuentas.' },
+  { module: 'email', prompt: 'Antes de enviar el informe, ¿qué comprobás?', context: '📤 El correo incluye varios destinatarios externos y un archivo con más datos de los que se solicitaron.', options: ['Que los destinatarios, adjunto, permisos y canal sean los adecuados.', 'Que salga rápido para no demorar la entrega.', 'Que todas las direcciones queden visibles en CC.'], answer: 0, feedback: 'Una fuga también puede ocurrir con un email legítimo enviado a destinatarios, adjuntos o permisos incorrectos.' },
+  { module: 'data', prompt: '¿Qué respuesta es la más segura?', context: '💬 Una compañera conocida pide por chat que reenvíes una planilla de clientes a su correo personal porque no puede entrar a la cuenta laboral.', options: ['Enviar la planilla porque conocés a la compañera.', 'Confirmar autorización y usar el canal corporativo aprobado.', 'Mandar capturas por una red social para que pueda avanzar.'], answer: 1, feedback: 'La identidad del destinatario y el canal son decisiones diferentes: la información laboral debe viajar por medios autorizados.' },
+  { module: 'email', prompt: '¿Qué hacés con este adjunto?', context: '📎 “Factura_0926.pdf.exe” llega desde una persona conocida, pero no esperabas recibir una factura y el archivo tiene doble extensión.', options: ['Verificar el pedido por un contacto conocido e independiente antes de abrirlo.', 'Abrirlo porque reconocés el nombre de quien escribe.', 'Responder al mismo correo y abrirlo si confirma.'], answer: 0, feedback: 'Un remitente conocido puede estar comprometido o ser suplantado. La doble extensión requiere frenar y verificar.' },
+  { module: 'social', prompt: '¿Qué hacés con el dispositivo encontrado?', context: '💾 En una zona común de la oficina aparece un pendrive etiquetado “Sueldos 2026”.', options: ['Reportarlo y no conectarlo.', 'Conectarlo en una computadora sin archivos importantes.', 'Llevarlo a casa para identificar al dueño.'], answer: 0, feedback: 'La curiosidad no es un control de seguridad. Un dispositivo desconocido puede contener software malicioso y debe reportarse sin conectarlo.' }
+];
 
 function q(prompt, options, answer, feedback) { return { prompt, options, answer, feedback }; }
 function s(title, person, visual, text, options, answer, feedback) { return { title, person, visual, text, options, answer, feedback }; }

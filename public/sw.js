@@ -1,4 +1,4 @@
-const CACHE = 'cyberquest-react-v1';
+const CACHE = 'cyberquest-react-v3';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
